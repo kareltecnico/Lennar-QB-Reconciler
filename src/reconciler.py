@@ -1,10 +1,6 @@
 import pandas as pd
 from pathlib import Path
-import sys
-import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from utils.dashboard_gen import generate_html_dashboard
 
 class LennarQBReconciler:
     def __init__(self, mapping_path, lennar_path, qb_path, output_dir):
@@ -78,19 +74,10 @@ class LennarQBReconciler:
     def audit(self):
         self.load_data()
         
-        # Phase 1: Validar Diferencia Total Exacta
         subtotal_lennar = self.lennar_df['AMOUNT PAID'].sum()
         subtotal_qb = self.qb_df['Amount'].sum()
-        
         total_diff = round(subtotal_lennar - subtotal_qb, 2)
         
-        if total_diff != 238.68:
-            print(f"[ERROR] Validación Cruzada Fallida! Diferencia es ${total_diff:,.2f}, no $238.68.")
-            sys.exit(1)
-            
-        print(f"[OK] Diferencia Total Exacta validada (${total_diff}).\n")
-        
-        # Agrupación por Proyecto + Phase
         lennar_g = self.lennar_df.groupby(['Normalized_Project', 'Phase'])['AMOUNT PAID'].sum().reset_index()
         qb_g = self.qb_df.groupby(['Normalized_Project', 'Phase'])['Amount'].sum().reset_index()
         
@@ -102,7 +89,6 @@ class LennarQBReconciler:
         
         merge_df['Diff'] = (merge_df['Lennar'] - merge_df['QB']).round(2)
         
-        # Lógica de Compensación de Fases por Proyecto
         project_net = merge_df.groupby('Normalized_Project')['Diff'].sum().round(2)
         
         discrepancias = []
@@ -110,16 +96,14 @@ class LennarQBReconciler:
         
         for proj, net_diff in project_net.items():
             if net_diff == 0.00:
-                # Comprobar si internamente hubo diferencias compensadas
                 internal_diffs = merge_df[(merge_df['Normalized_Project'] == proj) & (merge_df['Diff'] != 0)]
                 if not internal_diffs.empty:
                     dashboard_lines.append(f"✅ PROYECTO OK: {proj} (Diferencias internas en fases compensadas).")
                 else:
-                    pass # Todo ok y transparente, no hay que inundar el log
+                    dashboard_lines.append(f"✅ PROYECTO OK: {proj} (Sin diferencias).")
             else:
                 dashboard_lines.append(f"🔴 ERROR DETECTADO: {proj} | Diff Total: ${net_diff:,.2f}")
                 
-                # Desglosar donde esta el problema:
                 internal_diffs = merge_df[
                     (merge_df['Normalized_Project'] == proj) & 
                     (merge_df['Diff'] != 0)
@@ -145,41 +129,17 @@ class LennarQBReconciler:
                         'Acción Correctiva': action
                     })
 
-        # Save CSV
         import datetime
         ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         if discrepancias:
             df_log = pd.DataFrame(discrepancias)
             csv_path = self.output_dir / f"audit_results_{ts}.csv"
             df_log.to_csv(csv_path, index=False)
-        
-        # Save Markdown Report
-        md_path = self.output_dir / f"audit_report_{ts}.md"
-        with open(md_path, 'w') as f:
-            f.write("# 📋 Resumen Final de Discrepancias Reales (KOLTER & VIVANT)\n\n")
-            for line in dashboard_lines:
-                f.write(line + "\n\n")
-
-            if discrepancias:
-                f.write("\n## ❗ Detalle Analítico de Errores Vivos\n\n")
-                f.write("| Proyecto | Fase | Memo QB | Lennar | QB | Diferencia | Acción Correctiva |\n")
-                f.write("| --- | --- | --- | --- | --- | --- | --- |\n")
-                for d in discrepancias:
-                    f.write(f"| {d['Proyecto']} | {d['Fase']} | {d['Memo QB']} | {d['Monto Lennar']} | {d['Monto QB']} | {d['Diferencia']} | {d['Acción Correctiva']} |\n")
-                
-        print("\n=== RESUMEN DASHBOARD ===")
-        for line in dashboard_lines:
-            print(line)
-        
-        # Export HTML Dashboard
-        dashboard_path = self.output_dir / "dashboard.html"
-        generate_html_dashboard(dashboard_path, subtotal_lennar, subtotal_qb, total_diff, dashboard_lines, discrepancias)
-
-if __name__ == "__main__":
-    r = LennarQBReconciler(
-        "doc_to_test/Mapeo de Nombres.xlsx",
-        "doc_to_test/lennar check.xlsx",
-        "doc_to_test/to check from qb.xlsx",
-        "output"
-    )
-    r.audit()
+            
+        return {
+            "total_lennar": subtotal_lennar,
+            "total_qb": subtotal_qb,
+            "total_diff": total_diff,
+            "dashboard_lines": dashboard_lines,
+            "discrepancias": discrepancias
+        }
