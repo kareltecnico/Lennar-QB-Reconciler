@@ -1,59 +1,50 @@
-# Lennar-QB Reconciler 📊
+# Lennar-QB Reconciler v1.0 📊
 
-Un poderoso motor de auditoría automatizada en Python para identificar discrepancias al centavo entre la fuente de verdad (Lennar) y el control interno de QuickBooks. 
+Un motor de auditoría profesional diseñado para cruzar la facturación nativa de **Lennar** contra los registros de **QuickBooks**, identificando errores contables al centavo a través de un algoritmo inteligente de Compensación de Fases.
 
-Esta herramienta multiplataforma asegura el rastreo y validación matemática de pagos recibidos contra registros ingresados agrupando por Proyecto y Fase de obra.
+## 🛠 Instalación Rápida
 
-## 🚀 Arquitectura y Workflow
+La herramienta está construida en Python puro (Multiplataforma Mac/Windows).
 
-El proceso de reconciliación ocurre en varias fases:
-
-```mermaid
-graph TD
-    A[Lennar Excel] -->|Filtrado de pagos positivos| C(Data Loader Engine)
-    B[QuickBooks Excel] -->|Parseo de Proyecto/Fase| C
-    M[Mapping de Nombres] --> C
-    C --> D{Total Matching Validator}
-    D -->|Si total no cuadra| E[Group by Normalized Project & Phase]
-    D -->|Si perfección matemática| F[Audit Pasada. Fin.]
-    E --> G[Mapeo Lineal / Diferencias de Subtotales]
-    G --> H[Reporte Markdown]
-    G --> I[Output CSV Report]
-    H --> J[Auto-Backup Git a Remoto]
-    I --> J
-```
-
-## 🛠 Instalación y Configuración
-
-El proyecto está diseñado para funcionar nativamente tanto en Windows como en macOS garantizando integridad de rutas mediante `pathlib`.
-
-1. Clona el repositorio a tu máquina local.
-2. Crea el entorno virtual (opcional pero recomendado):
+1. Ingresa a la carpeta del proyecto.
+2. Genera y activa tu entorno virtual:
    ```bash
    python -m venv venv
-   source venv/bin/activate  # MacOS
-   # venv\Scripts\activate   # Windows
+   source venv/bin/activate  # En Mac/Linux
+   # venv\\Scripts\\activate   # En Windows
    ```
-3. Instala los paquetes requeridos desde `requirements.txt`:
+3. Instala las dependencias necesarias:
    ```bash
    pip install -r requirements.txt
    ```
 
-## 💻 Uso de la Aplicación
+## 🧠 Algoritmo de Compensación de Fases
 
-Para lanzar la auditoría, simplemente ejecuta el módulo principal `reconciler`:
+Durante el ciclo de conciliación de pagos de obra, es habitual que la constructora (Lennar) asigne un pago a una Fase específica (ej. `Final` o `Phase C`), mientras que administrativamente se ingresa en QuickBooks bajo una fase distinta para forzar la cuadratura de caja registradora (ej. `Extras` o `Phase X`).
+
+El **Lennar-QB Reconciler** soluciona esto aislando falsos positivos con una estrategia robusta en dos pasos:
+
+1. **Agrupación Macro:** Calcula primero el `Net_Diff` (Diferencia Neta) agrupando absolutamente todos los pagos del mismo *Proyecto Normalizado*, ignorando a qué fase pertenecen temporalmente.
+2. **Compensación Condicional:** 
+   - Si la suma total de cobros vs pagos del proyecto da `$0.00`, la herramienta asume que existieron **Diferencias Compensadas** y marca el proyecto completo como `✅ PROYECTO OK`.
+   - Si existe una variación neta distinta de cero, entra a la **Fase Analítica**, buscando cruzar `Phase` contra `Phase` para identificar exactamente la línea problemática, imprimiendo un dictamen `🔴 ERROR DETECTADO` junto con el nombre del proyecto, el Memo de QuickBooks causante y la acción correctiva.
+
+## 📈 Visualizador: Dashboard Pro (HTML)
+
+El sistema genera ahora automáticamente una salida web moderna (con Dark Theme y Bootstrap 5) para los líderes de facturación e ingenieros.
+
+Al correr la herramienta una vez, los resultados se guardarán automáticamente en una carpeta protegida `.gitignore` llamada `output/`
+
+📍 Para abrir el resultado visual:
+*Abre en cualquier navegador el archivo generado `output/dashboard.html`*
+
+## ▶ Ejecución
+
+Para iniciar la conciliación y generar simultáneamente en un solo comando el CSV, el log en Markdown, el Dashboard HTML y la respuesta por consola usa:
 
 ```bash
 python src/reconciler.py
 ```
 
-### Resultados y Log de Fallos
-La aplicación validará matemáticamente todos los registros y en caso de identificar discrepancias se detendrá y generará reportes profesionales en la carpeta `/output`. El reporte final de CSV contiene:
-- `Proyecto` / `Fase`
-- `Monto Lennar` y `Monto QB`
-- `Diferencias Matemáticas`
-- `Acción Correctiva Exacta` sugerida en QuickBooks (ej. Ajuste de Memos).
-
-### 🔒 Política de Prevención e Integración Continua (Git)
-Se ha implementado un `.gitignore` estricto que protege preventivamente cualquier archivo nativo proveniente de finanzas en `/data`. 
-La utilería `/utils/git_helper.py` cuenta con funciones integradas para auto-commitear **únicamente los logs de fallos generados en CSV/MD** hacia Github al finalizar un procesamiento.
+## 🚀 Roadmap
+- **Versión 2.0 - Módulo de Interacción**: Interfaz visual directa para la carga selectiva de plantillas de archivos de Lennar y QuickBooks en lugar de lectura de rutas estáticas, junto a un generador automático de correos para contratistas.

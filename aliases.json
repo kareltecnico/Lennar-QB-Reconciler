@@ -1,0 +1,13 @@
+{
+  "PROJECT_MAPPING": {
+    "EXAMPLE_LENNAR_NAME": "EXAMPLE_QB_NAME"
+  },
+  "PHASE_MAPPING": {
+    "Rough": "A",
+    "Ground": "A",
+    "Top Out": "B",
+    "Final": "C",
+    "Extras": "X",
+    "Warranty": "X"
+  }
+}

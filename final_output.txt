@@ -1,0 +1,112 @@
+Total Lennar (sólo positivos): $296,097.02
+Total QuickBooks: $591,716.68
+Diferencia Matemática Total: $295,619.66
+
+--------------------------------------------------
+DESGLOSE POR PROYECTO
+--------------------------------------------------
+[OK] Proyecto: ACACIA SF | Lennar: $3,009.02 | QB: $3,009.02 | OK
+[OK] Proyecto: BREEZEWOOD VILLAS | Lennar: $10,847.04 | QB: $10,847.04 | OK
+[OK] Proyecto: BRIARCREST SF | Lennar: $5,802.50 | QB: $5,802.50 | OK
+[OK] Proyecto: CORAL BREEZE SF | Lennar: $3,256.18 | QB: $3,256.18 | OK
+[!] Proyecto con Diferencia: HOMESTEAD - DAH - REDLANDS RIDGE SF - 2512060 | Lennar: $1,650.75 | QB: $0.00 | Dif: $1,650.75
+[!] Proyecto con Diferencia: HOMESTEAD DAH - REDLANDS RIDGE SF-2512060 | Lennar: $350.00 | QB: $0.00 | Dif: $350.00
+[OK] Proyecto: KEYS GATE NORTH 40S | Lennar: $7,329.14 | QB: $7,329.14 | OK
+[OK] Proyecto: KEYS GATE NORTH 60S | Lennar: $16,550.75 | QB: $16,550.75 | OK
+[OK] Proyecto: KEYS GATE NORTH THS | Lennar: $12,864.34 | QB: $12,864.34 | OK
+[!] Proyecto con Diferencia: KOLTER VILLAS | Lennar: $57,725.96 | QB: $57,747.28 | Dif: $-21.32
+[OK] Proyecto: LE JARDINE | Lennar: $12,819.17 | QB: $12,819.17 | OK
+[OK] Proyecto: LENDLEASE VILLAS | Lennar: $79,321.44 | QB: $79,321.44 | OK
+[!] Proyecto con Diferencia: MIAMI DAH VIVANT 2510660 | Lennar: $3,714.13 | QB: $0.00 | Dif: $3,714.13
+[!] Proyecto con Diferencia: MIAMI DAH-VIVANT 2510660 | Lennar: $1,811.48 | QB: $0.00 | Dif: $1,811.48
+[!] Proyecto con Diferencia: MIAMI-DAH-VIVANT 2510660 | Lennar: $5,525.61 | QB: $0.00 | Dif: $5,525.61
+[!] Proyecto con Diferencia: MIAMI-DAH-VIVANT-2510660 | Lennar: $5,069.82 | QB: $0.00 | Dif: $5,069.82
+[!] Proyecto con Diferencia: MIAMI-W-DAH - DORTA DUQUE VILLAS - 933660 | Lennar: $450.00 | QB: $0.00 | Dif: $450.00
+[!] Proyecto con Diferencia: MIAMI-W-DAH - DORTA DUQUE VILLAS 933660 | Lennar: $900.00 | QB: $0.00 | Dif: $900.00
+[OK] Proyecto: PARKLAND ROYALE 60 | Lennar: $4,774.22 | QB: $4,774.22 | OK
+[OK] Proyecto: PINELAND CREST VILLAS | Lennar: $11,045.91 | QB: $11,045.91 | OK
+[!] Proyecto con Diferencia: REDLAND RIDGE REDWOOD / REDLAND RIDGE SF | Lennar: $0.00 | QB: $2,000.75 | Dif: $-2,000.75
+[OK] Proyecto: SALERNO | Lennar: $100.00 | QB: $100.00 | OK
+[OK] Proyecto: SOLSTICE TH | Lennar: $42,330.04 | QB: $42,330.04 | OK
+[!] Proyecto con Diferencia: SP RESIDENTIAL VILLAS | Lennar: $0.00 | QB: $1,350.00 | Dif: $-1,350.00
+[!] Proyecto con Diferencia: VIVANT - 2510660 | Lennar: $1,811.48 | QB: $17,672.52 | Dif: $-15,861.04
+[OK] Proyecto: VIVANT 2510460 | Lennar: $350.00 | QB: $350.00 | OK
+[OK] Proyecto: WILDWOOD GROVES SF | Lennar: $6,688.04 | QB: $6,688.04 | OK
+
+
+==================================================
+INICIANDO ANÁLISIS A PROFUNDIDAD (PHASE & TRANSACTION)
+==================================================
+
+=> Analizando transacciones para: HOMESTEAD - DAH - REDLANDS RIDGE SF - 2512060
+  FALTA EN QB: Pago de Lennar por $500.00 (Activity: UW Warranty Directs)
+  FALTA EN QB: Pago de Lennar por $1,150.75 (Activity: T-Plumbing-Final)
+
+=> Analizando transacciones para: HOMESTEAD DAH - REDLANDS RIDGE SF-2512060
+  FALTA EN QB: Pago de Lennar por $350.00 (Activity: UW Warranty Directs)
+
+=> Analizando transacciones para: KOLTER VILLAS
+  FALTA EN QB: Pago de Lennar por $2,948.73 (Activity: T-Plumbing-Final)
+  FALTA EN QB: Pago de Lennar por $3,128.42 (Activity: T-Plumbing-Final)
+  FALTA EN QB: Pago de Lennar por $2,948.73 (Activity: T-Plumbing-Final)
+  FALTA EN QB: Pago de Lennar por $2,948.73 (Activity: T-Plumbing-Final)
+  FALTA EN QB: Pago de Lennar por $3,128.42 (Activity: T-Plumbing-Final)
+  FALTA EN QB: Pago de Lennar por $2,948.73 (Activity: T-Plumbing-Final)
+  FALTA EN QB: Pago de Lennar por $2,948.73 (Activity: T-Plumbing-Final)
+  FALTA EN QB: Pago de Lennar por $3,128.42 (Activity: T-Plumbing-Final)
+  FALTA EN QB: Pago de Lennar por $2,948.73 (Activity: T-Plumbing-Final)
+  FALTA EN QB: Pago de Lennar por $2,948.73 (Activity: T-Plumbing-Final)
+  FALTA EN QB: Pago de Lennar por $3,128.42 (Activity: T-Plumbing-Final)
+  FALTA EN QB: Pago de Lennar por $2,948.73 (Activity: T-Plumbing-Final)
+  FALTA EN QB: Pago de Lennar por $1,771.48 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,862.65 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,771.48 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,771.48 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,862.65 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,771.48 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,771.48 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,862.65 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,771.48 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,771.48 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,862.65 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,771.48 (Activity: T-Plumbing-Rough)
+  SOBRA EN QB: Transacción por $36,124.84 (Name: LENNAR:KOLTER-ANTILLIA VILLA:BLD03(01-12):C, Memo: 164206)
+  SOBRA EN QB: Transacción por $21,622.44 (Name: LENNAR:KOLTER-ANTILLIA VILLA:BLD25(01-12):A, Memo: 164207)
+
+=> Analizando transacciones para: MIAMI DAH VIVANT 2510660
+  FALTA EN QB: Pago de Lennar por $1,902.65 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,811.48 (Activity: T-Plumbing-Rough)
+
+=> Analizando transacciones para: MIAMI DAH-VIVANT 2510660
+  FALTA EN QB: Pago de Lennar por $1,811.48 (Activity: T-Plumbing-Rough)
+
+=> Analizando transacciones para: MIAMI-DAH-VIVANT 2510660
+  FALTA EN QB: Pago de Lennar por $1,811.48 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,811.48 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,902.65 (Activity: T-Plumbing-Rough)
+
+=> Analizando transacciones para: MIAMI-DAH-VIVANT-2510660
+  FALTA EN QB: Pago de Lennar por $1,629.17 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,629.17 (Activity: T-Plumbing-Rough)
+  FALTA EN QB: Pago de Lennar por $1,811.48 (Activity: T-Plumbing-Rough)
+
+=> Analizando transacciones para: MIAMI-W-DAH - DORTA DUQUE VILLAS - 933660
+  FALTA EN QB: Pago de Lennar por $450.00 (Activity: UW Warranty Directs)
+
+=> Analizando transacciones para: MIAMI-W-DAH - DORTA DUQUE VILLAS 933660
+  FALTA EN QB: Pago de Lennar por $900.00 (Activity: UW Warranty Directs)
+
+=> Analizando transacciones para: REDLAND RIDGE REDWOOD / REDLAND RIDGE SF
+  SOBRA EN QB: Transacción por $350.00 (Name: LENNAR:ABESS:LOT01/04:X, Memo: 164006)
+  SOBRA EN QB: Transacción por $1,150.75 (Name: LENNAR:ABESS:LOT05/02:X, Memo: 164008)
+  SOBRA EN QB: Transacción por $500.00 (Name: LENNAR:ABESS:LOT05/04:X, Memo: 163875)
+
+=> Analizando transacciones para: SP RESIDENTIAL VILLAS
+  SOBRA EN QB: Transacción por $450.00 (Name: LENNAR:SP RESIDENTIAL VILLAS:BLD12(01-10):X, Memo: 164235)
+  SOBRA EN QB: Transacción por $900.00 (Name: LENNAR:SP RESIDENTIAL VILLAS:BLD16(10-18):X, Memo: 163998)
+
+=> Analizando transacciones para: VIVANT - 2510660
+  FALTA EN QB: Pago de Lennar por $1,811.48 (Activity: T-Plumbing-Rough)
+  SOBRA EN QB: Transacción por $17,672.52 (Name: LENNAR:NEWTON ROAD ( THANG DANG VIVANT ) CONDO:BLD11(01-10):A, Memo: 164234)
+
+[✓] Log de auditoría guardado en: output/audit_results_2026-04-03_05-43-45.csv

@@ -1,0 +1,24 @@
+Total Lennar: $296,097.02
+Total QuickBooks: $295,858.34
+Diferencia Neta Detectada: $238.68
+[OK] Diferencia Total Exacta validada ($238.68). Procediendo al desglose por Fase.
+
+[✓] Archivo CSV exportado en: output/audit_results_2026-04-03_05-57-03.csv
+[✓] Reporte MD exportado en: output/audit_report_2026-04-03_05-57-03.md
+
+RESUMEN DE ERRORES:
+-> ACACIA SF (Fase C) | Dif: $306.59 | Corregir monto en Memo N/A. Falta $306.59
+-> ACACIA SF (Fase X) | Dif: $-306.59 | Corregir monto en Memo 163771. Sobra $306.59
+-> KEYS GATE NORTH THS (Fase C) | Dif: $503.62 | Corregir monto en Memo N/A. Falta $503.62
+-> KEYS GATE NORTH THS (Fase X) | Dif: $-503.62 | Corregir monto en Memo 163920, 163921. Sobra $503.62
+-> KOLTER VILLAS (Fase C) | Dif: $-21.32 | Corregir monto en Memo 164206. Sobra $21.32
+-> MIAMI-W-DAH - DORTA DUQUE VILLAS - 933660 (Fase X) | Dif: $450.00 | Corregir monto en Memo N/A. Falta $450.00
+-> MIAMI-W-DAH - DORTA DUQUE VILLAS 933660 (Fase X) | Dif: $900.00 | Corregir monto en Memo N/A. Falta $900.00
+-> REDLAND RIDGE REDWOOD / REDLAND RIDGE SF (Fase C) | Dif: $1,150.75 | Corregir monto en Memo N/A. Falta $1,150.75
+-> REDLAND RIDGE REDWOOD / REDLAND RIDGE SF (Fase X) | Dif: $-1,150.75 | Corregir monto en Memo 164006, 164008, 163875. Sobra $1,150.75
+-> SOLSTICE TH (Fase B) | Dif: $419.57 | Corregir monto en Memo 164233. Falta $419.57
+-> SOLSTICE TH (Fase X) | Dif: $-419.57 | Corregir monto en Memo 163736, 163886. Sobra $419.57
+-> SP RESIDENTIAL VILLAS (Fase X) | Dif: $-1,350.00 | Corregir monto en Memo 164235, 163998. Sobra $1,350.00
+-> VIVANT - 2510660 (Fase A) | Dif: $260.00 | Corregir monto en Memo 164234. Falta $260.00
+-> VIVANT 2510460 (Fase A) | Dif: $350.00 | Corregir monto en Memo N/A. Falta $350.00
+-> VIVANT 2510460 (Fase X) | Dif: $-350.00 | Corregir monto en Memo 163919. Sobra $350.00

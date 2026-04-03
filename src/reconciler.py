@@ -1,6 +1,10 @@
 import pandas as pd
 from pathlib import Path
 import sys
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from utils.dashboard_gen import generate_html_dashboard
 
 class LennarQBReconciler:
     def __init__(self, mapping_path, lennar_path, qb_path, output_dir):
@@ -166,6 +170,10 @@ class LennarQBReconciler:
         print("\n=== RESUMEN DASHBOARD ===")
         for line in dashboard_lines:
             print(line)
+        
+        # Export HTML Dashboard
+        dashboard_path = self.output_dir / "dashboard.html"
+        generate_html_dashboard(dashboard_path, subtotal_lennar, subtotal_qb, total_diff, dashboard_lines, discrepancias)
 
 if __name__ == "__main__":
     r = LennarQBReconciler(
