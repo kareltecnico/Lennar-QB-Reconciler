@@ -44,6 +44,7 @@ class LennarQBReconciler:
                 if '2510460' in name: return 'VIVANT 2510460'
                 if '2510660' in name: return 'VIVANT - 2510660'
             if 'REDLAND' in name: return 'REDLAND RIDGE REDWOOD / REDLAND RIDGE SF'
+            if 'DORTA' in name: return 'SP RESIDENTIAL VILLAS'
             
             for mapped in set(self.mapping_dict.values()):
                 if str(mapped) in name:
@@ -77,16 +78,13 @@ class LennarQBReconciler:
         subtotal_lennar = self.lennar_df['AMOUNT PAID'].sum()
         subtotal_qb = self.qb_df['Amount'].sum()
         
-        print(f"Total Lennar: ${subtotal_lennar:,.2f}")
-        print(f"Total QuickBooks: ${subtotal_qb:,.2f}")
         total_diff = round(subtotal_lennar - subtotal_qb, 2)
-        print(f"Diferencia Neta Detectada: ${total_diff:,.2f}")
         
         if total_diff != 238.68:
-            print("\n[ERROR] Validación Cruzada Fallida! El script no llega a $238.68.")
+            print(f"[ERROR] Validación Cruzada Fallida! Diferencia es ${total_diff:,.2f}, no $238.68.")
             sys.exit(1)
             
-        print("[OK] Diferencia Total Exacta validada ($238.68). Procediendo al desglose por Fase.\n")
+        print(f"[OK] Diferencia Total Exacta validada (${total_diff}).\n")
         
         # Agrupación por Proyecto + Phase
         lennar_g = self.lennar_df.groupby(['Normalized_Project', 'Phase'])['AMOUNT PAID'].sum().reset_index()
@@ -100,53 +98,74 @@ class LennarQBReconciler:
         
         merge_df['Diff'] = (merge_df['Lennar'] - merge_df['QB']).round(2)
         
+        # Lógica de Compensación de Fases por Proyecto
+        project_net = merge_df.groupby('Normalized_Project')['Diff'].sum().round(2)
+        
         discrepancias = []
-        for _, row in merge_df[merge_df['Diff'] != 0].iterrows():
-            proj, auth_phase, diff = row['Normalized_Project'], row['Phase'], row['Diff']
-            
-            # Buscar el Memo correspondiente en QB para esta fase
-            qb_matches = self.qb_df[(self.qb_df['Normalized_Project'] == proj) & (self.qb_df['Phase'] == auth_phase)]
-            memos = ", ".join(qb_matches['Memo'].dropna().astype(str).unique()) if not qb_matches.empty else "N/A"
-            
-            action = f"Corregir monto en Memo {memos}. Falta ${diff:,.2f}" if diff > 0 else f"Corregir monto en Memo {memos}. Sobra ${abs(diff):,.2f}"
-            
-            discrepancias.append({
-                'Proyecto': proj,
-                'Fase': auth_phase,
-                'Memo QB': memos,
-                'Monto Lennar': f"${row['Lennar']:,.2f}",
-                'Monto QB': f"${row['QB']:,.2f}",
-                'Diferencia': f"${diff:,.2f}",
-                'Acción Correctiva': action
-            })
+        dashboard_lines = []
+        
+        for proj, net_diff in project_net.items():
+            if net_diff == 0.00:
+                # Comprobar si internamente hubo diferencias compensadas
+                internal_diffs = merge_df[(merge_df['Normalized_Project'] == proj) & (merge_df['Diff'] != 0)]
+                if not internal_diffs.empty:
+                    dashboard_lines.append(f"✅ PROYECTO OK: {proj} (Diferencias internas en fases compensadas).")
+                else:
+                    pass # Todo ok y transparente, no hay que inundar el log
+            else:
+                dashboard_lines.append(f"🔴 ERROR DETECTADO: {proj} | Diff Total: ${net_diff:,.2f}")
+                
+                # Desglosar donde esta el problema:
+                internal_diffs = merge_df[
+                    (merge_df['Normalized_Project'] == proj) & 
+                    (merge_df['Diff'] != 0)
+                ]
+                
+                for _, row in internal_diffs.iterrows():
+                    auth_phase, diff = row['Phase'], row['Diff']
+                    
+                    qb_matches = self.qb_df[(self.qb_df['Normalized_Project'] == proj) & (self.qb_df['Phase'] == auth_phase)]
+                    memos = ", ".join(qb_matches['Memo'].dropna().astype(str).unique()) if not qb_matches.empty else "N/A"
+                    
+                    action = f"Corregir monto en Memo {memos}. Falta ${diff:,.2f}" if diff > 0 else f"Corregir monto en Memo {memos}. Sobra ${abs(diff):,.2f}"
+                    
+                    dashboard_lines.append(f"    - Fase {auth_phase}: {action}")
+                    
+                    discrepancias.append({
+                        'Proyecto': proj,
+                        'Fase': auth_phase,
+                        'Memo QB': memos,
+                        'Monto Lennar': f"${row['Lennar']:,.2f}",
+                        'Monto QB': f"${row['QB']:,.2f}",
+                        'Diferencia': f"${diff:,.2f}",
+                        'Acción Correctiva': action
+                    })
 
         # Save CSV
         import datetime
         ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        df_log = pd.DataFrame(discrepancias)
-        csv_path = self.output_dir / f"audit_results_{ts}.csv"
-        df_log.to_csv(csv_path, index=False)
+        if discrepancias:
+            df_log = pd.DataFrame(discrepancias)
+            csv_path = self.output_dir / f"audit_results_{ts}.csv"
+            df_log.to_csv(csv_path, index=False)
         
         # Save Markdown Report
         md_path = self.output_dir / f"audit_report_{ts}.md"
         with open(md_path, 'w') as f:
-            f.write("# 📋 Reporte de Discrepancias Lennar vs QuickBooks\n\n")
-            f.write(f"**Total Lennar:** ${subtotal_lennar:,.2f}  \n")
-            f.write(f"**Total QuickBooks:** ${subtotal_qb:,.2f}  \n")
-            f.write(f"**Diferencia Exacta:** ${total_diff:,.2f}  \n\n")
-            f.write("## ❗ Errores Encontrados\n\n")
-            f.write("| Proyecto | Fase | Memo | Lennar | QB | Diferencia | Acción Correctiva |\n")
-            f.write("| --- | --- | --- | --- | --- | --- | --- |\n")
-            for d in discrepancias:
-                f.write(f"| {d['Proyecto']} | {d['Fase']} | {d['Memo QB']} | {d['Monto Lennar']} | {d['Monto QB']} | {d['Diferencia']} | {d['Acción Correctiva']} |\n")
+            f.write("# 📋 Resumen Final de Discrepancias Reales (KOLTER & VIVANT)\n\n")
+            for line in dashboard_lines:
+                f.write(line + "\n\n")
+
+            if discrepancias:
+                f.write("\n## ❗ Detalle Analítico de Errores Vivos\n\n")
+                f.write("| Proyecto | Fase | Memo QB | Lennar | QB | Diferencia | Acción Correctiva |\n")
+                f.write("| --- | --- | --- | --- | --- | --- | --- |\n")
+                for d in discrepancias:
+                    f.write(f"| {d['Proyecto']} | {d['Fase']} | {d['Memo QB']} | {d['Monto Lennar']} | {d['Monto QB']} | {d['Diferencia']} | {d['Acción Correctiva']} |\n")
                 
-        print(f"[✓] Archivo CSV exportado en: {csv_path}")
-        print(f"[✓] Reporte MD exportado en: {md_path}")
-        
-        # Print table to console
-        print("\nRESUMEN DE ERRORES:")
-        for d in discrepancias:
-            print(f"-> {d['Proyecto']} (Fase {d['Fase']}) | Dif: {d['Diferencia']} | {d['Acción Correctiva']}")
+        print("\n=== RESUMEN DASHBOARD ===")
+        for line in dashboard_lines:
+            print(line)
 
 if __name__ == "__main__":
     r = LennarQBReconciler(
