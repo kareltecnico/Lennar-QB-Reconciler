@@ -1,0 +1,16 @@
+# Data folder: Ignore all Excel files to protect financial data
+data/**/*.xlsx
+data/**/*.xls
+doc_to_test/
+
+# Python defaults
+__pycache__/
+*.pyc
+
+# Environment
+venv/
+.venv/
+.env
+
+# MacOS
+.DS_Store
