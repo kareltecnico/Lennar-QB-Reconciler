@@ -134,14 +134,16 @@ with st.sidebar:
 
 # ====== TAB 1: AUDIT DASHBOARD ======
 with tab_audit:
+    status_hub = st.empty()
     ui_msgs = st.empty()
-    placeholder_info = st.empty()
     
     if not run_btn:
-        placeholder_info.info("Press **Run Analysis** in the sidebar to compile the audit.")
+        status_hub.info("Waiting for analysis... 🔍")
         
     if run_btn:
-        placeholder_info.empty()
+        status_msg.empty()  # Clear sidebar notifications
+        status_hub.success("Analysis completed successfully! ✅")
+        
         if LENNAR_PATH.exists() and QB_PATH.exists():
             
             # OUTPUT PURGE LOGIC
@@ -233,9 +235,9 @@ with tab_db:
             key="db_editor"
         )
         
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            save_clicked = st.button("💾 Save Database", type="primary", width="stretch")
+        col, _ = st.columns([1, 4])
+        with col:
+            save_clicked = st.button("💾 Save Database", type="primary")
             
         if save_clicked:
             has_errors = False
