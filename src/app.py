@@ -127,7 +127,7 @@ with st.sidebar:
 
     # Spacer pushing Shutdown down
     st.markdown("<br><br><br><br><br><br><br>", unsafe_allow_html=True)
-    if st.button("🛑 Shutdown App", width="stretch"):
+    if st.button("🛑 Shutdown App", width="stretch", type="secondary"):
         status_msg.success("Server Closed. You can now close this tab.")
         time.sleep(1)
         os.kill(os.getpid(), signal.SIGTERM)
@@ -135,7 +135,13 @@ with st.sidebar:
 # ====== TAB 1: AUDIT DASHBOARD ======
 with tab_audit:
     ui_msgs = st.empty()
+    placeholder_info = st.empty()
+    
+    if not run_btn:
+        placeholder_info.info("Press **Run Analysis** in the sidebar to compile the audit.")
+        
     if run_btn:
+        placeholder_info.empty()
         if LENNAR_PATH.exists() and QB_PATH.exists():
             
             # OUTPUT PURGE LOGIC
@@ -203,8 +209,6 @@ with tab_audit:
                     st.info("Ensure the files meet the schema and mappings exist in the SQL Database.")
         else:
             ui_msgs.error("Missing core Excel files in the `/data` directory. Please upload them on the sidebar.")
-    else:
-        st.info("Press **Run Analysis** in the sidebar to compile the audit.")
 
 # ====== TAB 2: DATABASE MANAGEMENT ======
 with tab_db:
@@ -229,7 +233,11 @@ with tab_db:
             key="db_editor"
         )
         
-        if st.button("💾 Save Database", type="primary", width="stretch"):
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            save_clicked = st.button("💾 Save Database", type="primary", width="stretch")
+            
+        if save_clicked:
             has_errors = False
             for index, row in edited_df.iterrows():
                 if pd.isna(row['Quickbook Name']) or str(row['Quickbook Name']).strip() == "":
