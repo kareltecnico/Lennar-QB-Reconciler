@@ -45,7 +45,7 @@ def health_check():
 
 health_check()
 
-st.set_page_config(page_title="Payment Reconciliation Tool v3.6", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Payment Reconciliation Tool v3.7", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
 # --- Custom Styling & Enterprise Dark Mode ---
 st.markdown("""
@@ -57,11 +57,17 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         margin-bottom: 2rem;
     }
-    /* Logo Fix */
-    [data-testid="stImage"] img {
+    /* Logo Fix & Circular Mask */
+    [data-testid="stImageCanvas"] img, [data-testid="stImage"] img {
         background-color: transparent !important;
+        border-radius: 50% !important;
+        overflow: hidden !important;
         border: none !important;
         padding: 0 !important;
+    }
+    [data-testid="stImage"] {
+        border-radius: 50% !important;
+        overflow: hidden !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -86,16 +92,16 @@ with col1:
         st.markdown("<h3 style='color: #4CAF50;'>🏢 BRAND LOGO</h3>", unsafe_allow_html=True)
 with col2:
     st.title("Payment Reconciliation Tool")
-    st.subheader("Leza's Plumbing - Financial Audit & Precision Tool")
+    st.markdown("<h2 style='font-size: 1.8rem; font-weight: 800; color: #4CAF50;'>Leza's Plumbing - Financial Audit & Precision Tool</h2>", unsafe_allow_html=True)
 
 st.markdown("---")
 
 # Navigation Tabs
-tab_audit, tab_db = st.tabs(["📊 Audit Dashboard", "⚙️ Manage Database (Mappings & Foremen)"])
+tab_audit, tab_db = st.tabs(["📊 Audit Dashboard", "⚙️ Manage Database"])
 
 # ====== SIDEBAR ======
 with st.sidebar:
-    st.header("App Controls")
+    st.markdown("<h1 style='font-size: 2.2rem; font-weight: bold;'>Control Panel</h1>", unsafe_allow_html=True)
     
     st.markdown("**File Uploaders** (Overrides existing data in `/data`)")
     upload_lennar = st.file_uploader("Upload Lennar File", type=['xlsx'])
@@ -113,13 +119,14 @@ with st.sidebar:
         with open(QB_PATH, "wb") as f:
             f.write(upload_qb.getbuffer())
         status_msg.success("Quickbook file updated 📝")
-    
-    st.markdown("---")
-    
+        
     # Run Button Layout
+    st.markdown("<br>", unsafe_allow_html=True)
     run_btn = st.button("🚀 Run Analysis", width="stretch", type="primary")
+    st.markdown("---")
 
-    st.markdown("<br><br><br><br><br><br>", unsafe_allow_html=True)
+    # Spacer pushing Shutdown down
+    st.markdown("<br><br><br><br><br><br><br>", unsafe_allow_html=True)
     if st.button("🛑 Shutdown App", width="stretch"):
         status_msg.success("Server Closed. You can now close this tab.")
         time.sleep(1)
@@ -214,12 +221,6 @@ with tab_db:
         df_map = pd.read_sql_query('SELECT qb_name AS "Quickbook Name", lennar_name AS "Lennar Name (Simplified)", foreman AS "Foreman" FROM mappings', conn)
         conn.close()
         
-        # Replace use_container_width with use_container_width=True but the prompt requests width="stretch". Let's check parameter
-        # Since st.data_editor uses use_container_width=True natively and width="stretch" isn't supported for it yet in some streams, 
-        # But wait, `st.data_editor` uses use_container_width. Let's just pass `use_container_width=True`. The console warning was specifically from `st.button()`. 
-        # The prompt says replace all, I'll comply exactly if it throws no errors. 
-        # Wait, for data_editor, `width="stretch"` is NOT documented. `use_container_width` is a boolean. I will just use `use_container_width=True`.
-        # I did swap it on st.button which is where the deprecation is explicitly shown.
         edited_df = st.data_editor(
             df_map,
             num_rows="dynamic",
@@ -228,7 +229,7 @@ with tab_db:
             key="db_editor"
         )
         
-        if st.button("Save Database", type="primary", width="stretch"):
+        if st.button("💾 Save Database", type="primary", width="stretch"):
             has_errors = False
             for index, row in edited_df.iterrows():
                 if pd.isna(row['Quickbook Name']) or str(row['Quickbook Name']).strip() == "":
