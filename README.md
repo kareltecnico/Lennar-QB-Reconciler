@@ -1,52 +1,54 @@
-# Lennar-QB Reconciler v2.0 📊
+# Lennar-QB Reconciler v3.0 (Enterprise Suite) 📊
 
-Un poderoso motor de auditoría profesional diseñado como Web App (Streamlit) interactiva para cruzar la facturación nativa de **Lennar** contra los registros de **QuickBooks**, identificando errores contables al centavo a través de un algoritmo inteligente de *Compensación de Fases*.
+A professional English-language Web Application (Streamlit) designed to act as an auditing engine. It reconciles native **Lennar** payments against internal **QuickBooks** records, detecting accounting discrepancies down to the cent using a smart Phase Compensation algorithm.
 
-## 🛠 Instalación Rápida
+## 🛠 Quick Installation
 
-La herramienta está construida en Python (Multiplataforma Mac/Windows).
+The tool is completely built in pure Python and cross-platform native (Mac/Windows).
 
-1. Ingresa a la carpeta del proyecto.
-2. Genera y activa tu entorno virtual:
+1. Open the project folder in your terminal.
+2. Initialize and activate your virtual environment:
    ```bash
    python -m venv venv
-   source venv/bin/activate  # En Mac/Linux
-   # venv\Scripts\activate   # En Windows
+   source venv/bin/activate  # Mac/Linux
+   # venv\Scripts\activate   # Windows
    ```
-3. Instala las dependencias necesarias:
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-## 🚀 Despliegue de la Web App
+## 🚀 Web App Deployment
 
-Para levantar la interfaz gráfica en modo local, solo debes dar un click en los accesos directos o correr el comando manualmente: 
+To boot the graphic interface on your local server, simply execute the startup scripts:
 
-**Directamente en la consola:**
+**Direct Terminal Command:**
 ```bash
 streamlit run src/app.py
 ```
 
-**Accesos Automáticos:**
-- 🖥️ **Mac/Linux:** Escribe `sh run_app.sh` en tu terminal o dale doble click al archivo ejecutable local.
-- 🪟 **Windows:** Dale enter/doble-click al archivo `run_app.bat`.
+**Automated Launchers:**
+- 🖥️ **Mac/Linux:** Type `sh run_app.sh` or double-click the file.
+- 🪟 **Windows:** Double-click `run_app.bat`.
 
-Automáticamente se abrirá una ventana en tu navegador por defecto `http://localhost:8501`.
+The interface will automatically load in your browser at `http://localhost:8501`.
 
-## 🔋 Funciones de Dual Mode (Automático/Manual)
-La Web App puede alimentarse de dos maneras:
-1. **Puesta Automática:** Si agregas tus Excels con nombres fijos (`lennar check.xlsx`, `to check from qb.xlsx`, y `Mapeo de Nombres.xlsx`) dentro de la carpeta `/data/`, la aplicación correrá la auditoría la próxima vez que ingreses.
-2. **Subida en vivo (Sidebar):** Usa la barra lateral de la Web App para subir los Excels directamente de tu sistema de archivos. Al subirlos, se guardarán y sobrescribirán en la carpeta `/data` para futuras consultas.
+## 🧠 Smart Core & UI Features (V3.0)
 
-## 🧠 Algoritmo de Compensación de Fases
+### 1. Database Editor (Foreman Management)
+You no longer need to edit `Mapeo de Nombres.xlsx` manually. The application features a **Manage Database** tab where you can Add, Edit, and Delete nomenclatures natively.
+- **Foreman Assignment:** A strict new 'Foreman' column allows tracking.
+- **Data Constraints:** Saving is locked if blank records or `Null` structures are detected, protecting mapping integrity.
 
-Durante el ciclo de conciliación de pagos de obra, es habitual que la constructora asigne un pago a una Fase específica `C`, mientras que administrativamente se ingresa en QuickBooks bajo una fase distinta `X`.
+### 2. Smart Swap Algorithm
+To protect the user from UX misclicks in the file uploaders, the audit engine runs a pre-check script. If it detects the Lennar file was uploaded into the QuickBooks channel (by tracking the `COMMUNITY` column), it **automatically swaps their routing threads** before proceeding, preventing system crashes.
 
-El **Lennar-QB Reconciler** aísla falsos positivos con una estrategia de dos pasos:
-1. **Agrupación Macro:** Calcula primero el `Net_Diff` (Diferencia Neta) agrupando absolutamente todos los pagos del mismo *Proyecto Normalizado*, ignorando temporalmente la fase.
-2. **Compensación Condicional:** 
-   - Si la suma total de cobros vs pagos del proyecto da `$0.00`, la herramienta asume que existieron **Diferencias Compensadas** y lo lista oculto en un *Expander* de proyectos OK.
-   - Si existe una variación neta distinta de cero, entra a la **Fase Analítica**. Muestra Tarjetas Rojas con el componente desfasado, el Subtotal de diferencias, Sub-Componentes Exactos y propone la *Acción Correctiva Exacta* en un Memo específico de QuickBooks.
+### 3. Phase Compensation Algorithm
+When a payment is labeled `Phase C` in Lennar but recorded as `Phase X` in QuickBooks:
+1. **Macro Grouping:** Computes the `Net_Diff` of completely aggregated projects.
+2. **Conditional Validation:** 
+   - If the sum of charges vs. payments is `$0.00`, it assumes the phases are internally balanced and hides it safely under the `Balanced Projects (Compensated)` expander.
+   - If a variation is detected, it triggers the **Analytical Phase** bringing up red action cards, revealing exactly which QB Memo is flawed and how much the discrepancy is off by.
 
 ## 📈 Roadmap
-- **Versión 3.0:** Módulo de validación multi-cuenta en nube de QuickBooks Online.
+- **Version 4.0:** Cloud-based sync native integration with QuickBooks Online API.

@@ -1,6 +1,7 @@
 import pandas as pd
 from pathlib import Path
 import os
+import sys
 
 class LennarQBReconciler:
     def __init__(self, mapping_path, lennar_path, qb_path, output_dir):
@@ -10,23 +11,49 @@ class LennarQBReconciler:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
+    def _check_and_swap_files(self):
+        # Read the first few rows just to get headers
+        df1_cols = pd.read_excel(self.lennar_path, nrows=0).columns
+        df2_cols = pd.read_excel(self.qb_path, nrows=0).columns
+        
+        df1_cols_upper = [str(c).strip().upper() for c in df1_cols]
+        df2_cols_upper = [str(c).strip().upper() for c in df2_cols]
+        
+        if 'COMMUNITY' not in df1_cols_upper and 'COMMUNITY' in df2_cols_upper:
+            # Swap!
+            self.lennar_path, self.qb_path = self.qb_path, self.lennar_path
+            
     def load_data(self):
+        # Check for smart swap first
+        self._check_and_swap_files()
+        
         self.mapping_df = pd.read_excel(self.mapping_path)
+        
+        # Validation for Mapping
+        required_map_cols = ['QuickBooks Name', 'Lennar Name (Simplified)', 'Foreman']
+        for col in required_map_cols:
+            if col not in self.mapping_df.columns:
+                raise ValueError(f"Data Schema Error: Mapping file is missing '{col}' column.")
+                
         self.mapping_dict = dict(zip(
-            self.mapping_df['Nombre en QuickBooks'].str.strip().str.upper(), 
-            self.mapping_df['Nombre en Lennar (Simplificado)'].str.strip().str.upper()
+            self.mapping_df['QuickBooks Name'].astype(str).str.strip().str.upper(), 
+            self.mapping_df['Lennar Name (Simplified)'].astype(str).str.strip().str.upper()
         ))
         
         # Lennar
         self.lennar_df = pd.read_excel(self.lennar_path)
         self.lennar_df.columns = [str(c).strip().replace('\n', ' ').upper() for c in self.lennar_df.columns]
-        self.lennar_df = self.lennar_df.dropna(subset=['COMMUNITY'])  # Remove grand totals row
         
+        # Validation for Lennar
+        if 'COMMUNITY' not in self.lennar_df.columns or 'AMOUNT PAID' not in self.lennar_df.columns:
+            raise ValueError("Data Schema Error (Lennar file): Missing required columns 'COMMUNITY' or 'AMOUNT PAID'. Please check your Excel structure.")
+            
+        self.lennar_df = self.lennar_df.dropna(subset=['COMMUNITY'])  # Remove grand totals row
         self.lennar_df['AMOUNT PAID'] = pd.to_numeric(self.lennar_df['AMOUNT PAID'], errors='coerce').fillna(0)
         self.lennar_df = self.lennar_df[self.lennar_df['AMOUNT PAID'] > 0]
         self.lennar_df['COMMUNITY_RAW'] = self.lennar_df['COMMUNITY'].astype(str).str.strip().str.upper()
         
-        # Phase Mapping para Lennar
+        # Phase Mapping for Lennar
         def get_lennar_phase(activity):
             activity = str(activity).upper()
             if 'ROUGH' in activity: return 'A'
@@ -35,10 +62,10 @@ class LennarQBReconciler:
             if 'WARRANTY' in activity or 'THEFT' in activity: return 'X'
             return 'UNKNOWN'
         
-        self.lennar_df['ACTIVITY'] = self.lennar_df['ACTIVITY'].fillna('')
+        self.lennar_df['ACTIVITY'] = self.lennar_df.get('ACTIVITY', pd.Series()).fillna('')
         self.lennar_df['Phase'] = self.lennar_df['ACTIVITY'].apply(get_lennar_phase)
         
-        # Normalize Project Name para Lennar
+        # Normalize Project Name for Lennar
         def clean_lennar_community(name):
             if 'VIVANT' in name:
                 if '2510460' in name: return 'VIVANT 2510460'
@@ -53,8 +80,11 @@ class LennarQBReconciler:
             
         self.lennar_df['Normalized_Project'] = self.lennar_df['COMMUNITY_RAW'].apply(clean_lennar_community)
 
-        # QB
+        # QuickBooks
         self.qb_df = pd.read_excel(self.qb_path)
+        if 'Name' not in self.qb_df.columns or 'Type' not in self.qb_df.columns or 'Amount' not in self.qb_df.columns:
+            raise ValueError("Data Schema Error (QuickBooks file): Missing required columns 'Name', 'Type', or 'Amount'.")
+            
         self.qb_df = self.qb_df.dropna(subset=['Name', 'Type'])
         self.qb_df['Amount'] = pd.to_numeric(self.qb_df['Amount'], errors='coerce').fillna(0)
         self.qb_df['Name_Clean'] = self.qb_df['Name'].astype(str).str.strip().str.upper()
@@ -98,11 +128,11 @@ class LennarQBReconciler:
             if net_diff == 0.00:
                 internal_diffs = merge_df[(merge_df['Normalized_Project'] == proj) & (merge_df['Diff'] != 0)]
                 if not internal_diffs.empty:
-                    dashboard_lines.append(f"✅ PROYECTO OK: {proj} (Diferencias internas en fases compensadas).")
+                    dashboard_lines.append(f"✅ PROJECT BALANCED: {proj} (Internal Phase Differences Compensated).")
                 else:
-                    dashboard_lines.append(f"✅ PROYECTO OK: {proj} (Sin diferencias).")
+                    dashboard_lines.append(f"✅ PROJECT BALANCED: {proj} (Exact Match).")
             else:
-                dashboard_lines.append(f"🔴 ERROR DETECTADO: {proj} | Diff Total: ${net_diff:,.2f}")
+                dashboard_lines.append(f"🔴 REQUIRED ACTION DETECTED: {proj} | Diff Total: ${net_diff:,.2f}")
                 
                 internal_diffs = merge_df[
                     (merge_df['Normalized_Project'] == proj) & 
@@ -115,18 +145,18 @@ class LennarQBReconciler:
                     qb_matches = self.qb_df[(self.qb_df['Normalized_Project'] == proj) & (self.qb_df['Phase'] == auth_phase)]
                     memos = ", ".join(qb_matches['Memo'].dropna().astype(str).unique()) if not qb_matches.empty else "N/A"
                     
-                    action = f"Corregir monto en Memo {memos}. Falta ${diff:,.2f}" if diff > 0 else f"Corregir monto en Memo {memos}. Sobra ${abs(diff):,.2f}"
+                    action = f"Correct amount in Memo {memos}. Short by ${diff:,.2f}" if diff > 0 else f"Correct amount in Memo {memos}. Over by ${abs(diff):,.2f}"
                     
-                    dashboard_lines.append(f"    - Fase {auth_phase}: {action}")
+                    dashboard_lines.append(f"    - Phase {auth_phase}: {action}")
                     
                     discrepancias.append({
-                        'Proyecto': proj,
-                        'Fase': auth_phase,
-                        'Memo QB': memos,
-                        'Monto Lennar': f"${row['Lennar']:,.2f}",
-                        'Monto QB': f"${row['QB']:,.2f}",
-                        'Diferencia': f"${diff:,.2f}",
-                        'Acción Correctiva': action
+                        'Project': proj,
+                        'Phase': auth_phase,
+                        'QB Memo': memos,
+                        'Lennar Amount': f"${row['Lennar']:,.2f}",
+                        'QB Amount': f"${row['QB']:,.2f}",
+                        'Difference': f"${diff:,.2f}",
+                        'Action Required': action
                     })
 
         import datetime

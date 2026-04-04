@@ -3,12 +3,26 @@ import pandas as pd
 from pathlib import Path
 import os
 import sys
+import signal
 
 # Ensure src modules are discoverable
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from reconciler import LennarQBReconciler
 
-st.set_page_config(page_title="Lennar-QB Reconciler", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Lennar-QB Reconciler V3.0", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+
+# --- Custom Styling & Enterprise Dark Mode ---
+st.markdown("""
+<style>
+    .kpi-container {
+        background-color: #1E1E1E;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        margin-bottom: 2rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Directory setup
 DATA_DIR = Path("data")
@@ -27,88 +41,133 @@ with col1:
     if Path("output/logo.png").exists():
         st.image("output/logo.png", width=80)
 with col2:
-    st.title("Lennar vs QuickBooks Audit Web App")
+    st.title("Lennar vs QuickBooks Audit Hub")
 
 st.markdown("---")
 
-# Sidebar Uploaders (Modo Manual)
-with st.sidebar:
-    st.header("Modo Manual (Uploaders)")
-    st.markdown("Si subes un archivo aquí, sobrescribirá temporal o permanentemente los datos en `/data`.")
-    
-    upload_lennar = st.file_uploader("Subir Archivo Lennar", type=['xlsx'])
-    upload_qb = st.file_uploader("Subir Archivo QuickBooks", type=['xlsx'])
-    upload_mapping = st.file_uploader("Subir Archivo Mapping", type=['xlsx'])
+# Navigation Tabs
+tab_audit, tab_db = st.tabs(["📊 Audit Dashboard", "⚙️ Manage Database (Mappings & Foremen)"])
 
-    # Sobrescritura de archivos
+# ====== SIDEBAR ======
+with st.sidebar:
+    st.header("App Controls")
+    
+    # Run Button
+    run_btn = st.button("🚀 Run Analysis", use_container_width=True, type="primary")
+    
+    st.markdown("---")
+    st.markdown("**File Uploaders** (Automatically overrides existing data in `/data`)")
+    
+    upload_lennar = st.file_uploader("Upload Lennar File", type=['xlsx'])
+    upload_qb = st.file_uploader("Upload QuickBooks File", type=['xlsx'])
+    
     if upload_lennar:
         with open(LENNAR_PATH, "wb") as f:
             f.write(upload_lennar.getbuffer())
-        st.success("Lennar actualizado.")
+        st.success("Lennar file updated.")
         
     if upload_qb:
         with open(QB_PATH, "wb") as f:
             f.write(upload_qb.getbuffer())
-        st.success("QuickBooks actualizado.")
-        
-    if upload_mapping:
-        with open(MAPPING_PATH, "wb") as f:
-            f.write(upload_mapping.getbuffer())
-        st.success("Mapping actualizado.")
+        st.success("QuickBooks file updated.")
+    
+    st.markdown("---")
+    if st.button("🛑 Shutdown App", use_container_width=True):
+        st.warning("Shutting down...")
+        os.kill(os.getpid(), signal.SIGTERM)
 
-# Modo Automático (Ejecución)
-if LENNAR_PATH.exists() and QB_PATH.exists() and MAPPING_PATH.exists():
+# ====== TAB 1: AUDIT DASHBOARD ======
+with tab_audit:
+    if run_btn:
+        if LENNAR_PATH.exists() and QB_PATH.exists() and MAPPING_PATH.exists():
+            with st.spinner("Analyzing files and applying Compensated Phase logic..."):
+                try:
+                    # Inicializar y auditar
+                    rec = LennarQBReconciler(
+                        mapping_path=str(MAPPING_PATH),
+                        lennar_path=str(LENNAR_PATH),
+                        qb_path=str(QB_PATH),
+                        output_dir=str(OUT_DIR)
+                    )
+                    
+                    result = rec.audit()
+                    
+                    # UI Metrics
+                    st.markdown("<div class='kpi-container'>", unsafe_allow_html=True)
+                    kpi1, kpi2, kpi3 = st.columns(3)
+                    with kpi1:
+                        st.metric(label="Total Lennar", value=f"${result['total_lennar']:,.2f}")
+                    with kpi2:
+                        st.metric(label="Total QuickBooks", value=f"${result['total_qb']:,.2f}")
+                    with kpi3:
+                        st.metric(label="Exact Net Difference", value=f"${result['total_diff']:,.2f}")
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    
+                    # UI Errors and OKs
+                    discrepancias = result['discrepancias']
+                    dashboard_lines = result['dashboard_lines']
+                    
+                    if not discrepancias:
+                        st.success("¡MATHEMATICALLY BALANCED! No uncompensated differences found.")
+                    else:
+                        st.subheader("🔴 Required Actions in QuickBooks")
+                        for d in discrepancias:
+                            with st.container(border=True):
+                                st.error(f"**Error in {d['Project']}** (Phase {d['Phase']})")
+                                col_a, col_b, col_c = st.columns(3)
+                                col_a.metric("Lennar Amount", d['Lennar Amount'])
+                                col_b.metric("QB Amount", d['QB Amount'])
+                                col_c.write(f"**QB Memo:** {d['QB Memo']}")
+                                
+                                st.markdown(f"**Discrepancy:** `<span style='color: #ff4b4b; font-size:1.2em;'>{d['Difference']}</span>`", unsafe_allow_html=True)
+                                st.warning(f"**🔥 REQUIRED ACTION IN QB:** {d['Action Required']}")
+                                
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    
+                    with st.expander("✅ Balanced Projects (Compensated internally or Exact Match)"):
+                        for line in dashboard_lines:
+                            if line.startswith("✅ PROJECT BALANCED:"):
+                                name = line.replace("✅ PROJECT BALANCED:", "").strip()
+                                st.markdown(f"- **{name}**")
+                                
+                except Exception as e:
+                    st.error(f"Execution Error: {e}")
+                    # Provide visual help for Data Schema
+                    st.info("Ensure the files meet the schema (E.g. Lennar must have 'COMMUNITY' and 'AMOUNT PAID').")
+        else:
+            st.error("Missing core files in the `/data` directory. Please upload them on the sidebar.")
+    else:
+        st.info("Press **Run Analysis** in the sidebar to compile the audit.")
+
+# ====== TAB 2: DATABASE MANAGEMENT ======
+with tab_db:
+    st.subheader("Project & Foreman Mapping Database")
+    st.write("Modify the central nomenclature dictionary. Changes are saved immediately to disk. **Null fields are not permitted.**")
+    
     try:
-        # Inicializar y auditar
-        rec = LennarQBReconciler(
-            mapping_path=str(MAPPING_PATH),
-            lennar_path=str(LENNAR_PATH),
-            qb_path=str(QB_PATH),
-            output_dir=str(OUT_DIR)
+        df_map = pd.read_excel(MAPPING_PATH)
+        
+        # Enforce column structure if corrupted by an older version upgrade
+        if 'QuickBooks Name' not in df_map.columns:
+            df_map = df_map.rename(columns={'Nombre en QuickBooks': 'QuickBooks Name', 'Nombre en Lennar (Simplificado)': 'Lennar Name (Simplified)'})
+        if 'Foreman' not in df_map.columns:
+            df_map['Foreman'] = 'Unassigned'
+            
+        edited_df = st.data_editor(
+            df_map,
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True
         )
         
-        result = rec.audit()
-        
-        # UI Metrics
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric(label="Total Lennar", value=f"${result['total_lennar']:,.2f}")
-        with col2:
-            st.metric(label="Total QuickBooks", value=f"${result['total_qb']:,.2f}")
-        with col3:
-            st.metric(label="Diferencia Neta Exacta", value=f"${result['total_diff']:,.2f}", delta=None)
-            
-        st.markdown("---")
-        
-        # UI Errors and OKs
-        discrepancias = result['discrepancias']
-        dashboard_lines = result['dashboard_lines']
-        
-        if not discrepancias:
-            st.success("¡PERFECCIÓN MATEMÁTICA! No se encontraron diferencias sin compensar.")
-        else:
-            st.subheader("🔴 Acciones Requeridas en QuickBooks (Faltantes/Sobrantes Netos)")
-            for d in discrepancias:
-                with st.error(f"**Error en {d['Proyecto']}** (Fase {d['Fase']})"):
-                    st.write(f"**Diferencia de:** `<span style='color: white; font-weight: bold; font-size: 1.2rem;'>{d['Diferencia']}</span>`", unsafe_allow_html=True)
-                    col_a, col_b, col_c = st.columns(3)
-                    col_a.metric("Monto Lennar", d['Monto Lennar'])
-                    col_b.metric("Monto QB", d['Monto QB'])
-                    col_c.write(f"**Memo en QB:** {d['Memo QB']}")
-                    
-                    st.warning(f"**🔥 ACCIÓN EXACTA EN QB:** {d['Acción Correctiva']}")
-                    
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        with st.expander("✅ Proyectos Compensados / OK"):
-            for line in dashboard_lines:
-                if line.startswith("✅ PROYECTO OK:"):
-                    name = line.replace("✅ PROYECTO OK:", "").strip()
-                    st.markdown(f"- **{name}**")
-                    
+        # Data Integrity Validation
+        if st.button("Save Database", type="primary"):
+            # Check blanks
+            if edited_df.isnull().values.any() or (edited_df.astype(str).str.strip() == '').any().any():
+                st.error("Strict Constraint Failed: Blank cells are not allowed in 'Project' or 'Foreman' columns.")
+            else:
+                edited_df.to_excel(MAPPING_PATH, index=False)
+                st.success("Database overwritten successfully!")
+                
     except Exception as e:
-        st.error(f"Error procesando la información: {e}")
-        st.exception(e)
-
-else:
-    st.info("👋 **Bienvenido.** Sube los 3 archivos Excel obligatorios en el panel de la izquierda para comenzar la auditoría o asegúrate de que existan en la carpeta `/data`.")
+        st.error(f"Error loading Mapping Database: {e}")
