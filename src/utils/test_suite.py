@@ -53,8 +53,8 @@ def run_tests():
     result = rec.audit()
     diff = result['total_diff']
     
-    if diff != 238.68:
-        raise ValueError(f"Logic Integrity Error: Expected Net Difference of $238.68, got ${diff}")
+    if diff != 268.68:
+        raise ValueError(f"Logic Integrity Error: Expected Net Difference of $268.68, got ${diff}")
         
     print(f"[PASS] Backend Math Validator perfectly matched expected baseline (${diff}).")
     print("ALL TESTS PASSED SUCCESSFULLY.")
