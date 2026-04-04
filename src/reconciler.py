@@ -69,13 +69,12 @@ class LennarQBReconciler:
         conn = sqlite3.connect(self.db_path)
         self.mapping_df = pd.read_sql_query('SELECT * FROM mappings', conn)
         conn.close()
-                
+                 # Normalizing DB
         self.mapping_dict = dict(zip(
             self.mapping_df['qb_name'].astype(str).str.strip().str.upper(), 
             self.mapping_df['lennar_name'].astype(str).str.strip().str.upper()
         ))
         
-        # Guardamos foreman en diccionario inverso también
         self.foreman_dict = dict(zip(
             self.mapping_df['lennar_name'].astype(str).str.strip().str.upper(), 
             self.mapping_df['foreman'].astype(str).str.strip()
@@ -118,10 +117,10 @@ class LennarQBReconciler:
             
         self.lennar_df['Normalized_Project'] = self.lennar_df['COMMUNITY_RAW'].apply(clean_lennar_community)
 
-        # QuickBooks
+        # Quickbook
         self.qb_df = pd.read_excel(self.qb_path)
         if 'Name' not in self.qb_df.columns or 'Type' not in self.qb_df.columns or 'Amount' not in self.qb_df.columns:
-            raise ValueError("Data Schema Error (QuickBooks file): Missing required columns 'Name', 'Type', or 'Amount'.")
+            raise ValueError("Data Schema Error (Quickbook file): Missing required columns 'Name', 'Type', or 'Amount'.")
             
         self.qb_df = self.qb_df.dropna(subset=['Name', 'Type'])
         self.qb_df['Amount'] = pd.to_numeric(self.qb_df['Amount'], errors='coerce').fillna(0)
@@ -170,7 +169,6 @@ class LennarQBReconciler:
             proj = r['Normalized_Project']
             net_diff = round(r['Proj_Diff'], 2)
             
-            # Fetch foreman loosely based on partial matching since dict was full normalized
             f_man = self.foreman_dict.get(proj, "Pending Assignment")
             
             if net_diff == 0.00:
@@ -193,16 +191,17 @@ class LennarQBReconciler:
                     qb_matches = self.qb_df[(self.qb_df['Normalized_Project'] == proj) & (self.qb_df['Phase'] == auth_phase)]
                     memos = ", ".join(qb_matches['Memo'].dropna().astype(str).unique()) if not qb_matches.empty else "N/A"
                     
-                    action = f"Correct amount in Memo {memos}. Short by ${diff:,.2f}" if diff > 0 else f"Correct amount in Memo {memos}. Over by ${abs(diff):,.2f}"
+                    diff_type = "Short" if diff > 0 else "Over"
+                    action = f"Correct amount in Invoice {memos}. {diff_type} by ${abs(diff):,.2f}."
                     
                     dashboard_lines.append(f"    - Phase {auth_phase}: {action}")
                     
                     discrepancias.append({
                         'Project': proj,
                         'Phase': auth_phase,
-                        'QB Memo': memos,
+                        'Quickbook Invoice': memos,
                         'Lennar Amount': f"${row['Lennar']:,.2f}",
-                        'QB Amount': f"${row['QB']:,.2f}",
+                        'Quickbook Amount': f"${row['QB']:,.2f}",
                         'Difference': f"${diff:,.2f}",
                         'Action Required': action,
                         'Foreman': f_man

@@ -6,6 +6,7 @@ import sys
 import signal
 import datetime
 import sqlite3
+import time
 
 # Ensure src modules are discoverable
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -43,7 +44,7 @@ def health_check():
 
 health_check()
 
-st.set_page_config(page_title="Lennar-QB Reconciler V3.3", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Lennar-Quickbook Reconciler V3.5", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
 # --- Custom Styling & Enterprise Dark Mode ---
 st.markdown("""
@@ -73,11 +74,11 @@ DB_PATH = DATA_DIR / "reconciler.db"
 col1, col2 = st.columns([1, 8])
 with col1:
     if LOGO_PATH.exists():
-        st.image(str(LOGO_PATH), width=100, use_column_width=False)
+        st.image(str(LOGO_PATH), width=100)
     else:
         st.markdown("<h3 style='color: #4CAF50;'>🏢 BRAND LOGO</h3>", unsafe_allow_html=True)
 with col2:
-    st.title("Lennar vs QuickBooks Audit Hub")
+    st.title("Lennar vs Quickbook Audit Hub")
 
 st.markdown("---")
 
@@ -95,7 +96,7 @@ with st.sidebar:
     st.markdown("**File Uploaders** (Overrides existing data in `/data`)")
     
     upload_lennar = st.file_uploader("Upload Lennar File", type=['xlsx'])
-    upload_qb = st.file_uploader("Upload QuickBooks File", type=['xlsx'])
+    upload_qb = st.file_uploader("Upload Quickbook File", type=['xlsx'])
     
     if upload_lennar:
         with open(LENNAR_PATH, "wb") as f:
@@ -105,11 +106,12 @@ with st.sidebar:
     if upload_qb:
         with open(QB_PATH, "wb") as f:
             f.write(upload_qb.getbuffer())
-        st.toast("QuickBooks file updated 📝")
+        st.toast("Quickbook file updated 📝")
     
     st.markdown("---")
     if st.button("🛑 Shutdown App", use_container_width=True):
-        st.warning("Shutting down...")
+        st.success("Server Closed. You can now close this tab.")
+        time.sleep(1)
         os.kill(os.getpid(), signal.SIGTERM)
 
 # ====== TAB 1: AUDIT DASHBOARD ======
@@ -134,7 +136,7 @@ with tab_audit:
                     with kpi1:
                         st.metric(label="Total Lennar", value=f"${result['total_lennar']:,.2f}")
                     with kpi2:
-                        st.metric(label="Total QuickBooks", value=f"${result['total_qb']:,.2f}")
+                        st.metric(label="Total Quickbook", value=f"${result['total_qb']:,.2f}")
                     with kpi3:
                         st.metric(label="Exact Net Difference", value=f"${result['total_diff']:,.2f}")
                     st.markdown("</div>", unsafe_allow_html=True)
@@ -146,17 +148,19 @@ with tab_audit:
                     if not discrepancias:
                         st.success("¡MATHEMATICALLY BALANCED! No uncompensated differences found.")
                     else:
-                        st.subheader("🔴 Required Actions in QuickBooks")
+                        st.subheader("🔴 Required Actions in Quickbook")
                         for d in discrepancias:
                             with st.container(border=True):
                                 st.error(f"**{d['Project']}** (Phase {d['Phase']}) | Foreman: **{d['Foreman']}**")
+                                
+                                # ROW 1 Clean Metrics
                                 col_a, col_b, col_c = st.columns(3)
                                 col_a.metric("Lennar Amount", d['Lennar Amount'])
-                                col_b.metric("QB Amount", d['QB Amount'])
-                                col_c.write(f"**QB Memo:** {d['QB Memo']}")
+                                col_b.metric("Quickbook Amount", d['Quickbook Amount'])
+                                col_c.metric("Difference", d['Difference'])
                                 
-                                st.markdown(f"**Discrepancy:** `<span style='color: #ff4b4b; font-size:1.2em;'>{d['Difference']}</span>`", unsafe_allow_html=True)
-                                st.warning(f"**🔥 REQUIRED ACTION IN QB:** {d['Action Required']}")
+                                # ROW 2 Exact Action Wording
+                                st.warning(f"**🔥 REQUIRED ACTION IN QUICKBOOK:** {d['Action Required']}")
                                 
                     st.markdown("<br>", unsafe_allow_html=True)
                     
@@ -177,14 +181,14 @@ with tab_audit:
 # ====== TAB 2: DATABASE MANAGEMENT ======
 with tab_db:
     st.subheader("SQLite Project & Foreman Database")
-    st.write("Modify the central nomenclature dictionary directly in SQL. Changes persist indefinitely without Excel files. **Null fields are not permitted.**")
+    st.write("Modify the central nomenclature dictionary directly in SQL. Changes persist indefinitely. **Null fields are not permitted.**")
     
     # Ensure DB exists using a dummy initialization
     LennarQBReconciler(str(DB_PATH), "dummy", "dummy", "dummy")
     
     try:
         conn = sqlite3.connect(str(DB_PATH))
-        df_map = pd.read_sql_query('SELECT qb_name AS "QuickBooks Name", lennar_name AS "Lennar Name (Simplified)", foreman AS "Foreman" FROM mappings', conn)
+        df_map = pd.read_sql_query('SELECT qb_name AS "Quickbook Name", lennar_name AS "Lennar Name (Simplified)", foreman AS "Foreman" FROM mappings', conn)
         conn.close()
         
         edited_df = st.data_editor(
@@ -196,36 +200,45 @@ with tab_db:
         )
         
         if st.button("Save Database", type="primary"):
-            # Check blanks for QB Name and Foreman specifically
-            if edited_df['QuickBooks Name'].astype(str).str.strip().eq('').any() or \
-               edited_df['Foreman'].astype(str).str.strip().eq('').any() or \
-               edited_df.isnull().values.any():
+            # Check blanks for Quickbook Name and Foreman securely without crashing on float data or null pointers
+            has_errors = False
+            for index, row in edited_df.iterrows():
+                if pd.isna(row['Quickbook Name']) or str(row['Quickbook Name']).strip() == "":
+                    has_errors = True
+                if pd.isna(row['Foreman']) or str(row['Foreman']).strip() == "":
+                    has_errors = True
+            
+            if has_errors:
                 st.error("Error: All fields are mandatory! ❌")
             else:
-                # Write to DB safely
-                edited_df = edited_df.rename(columns={
-                    "QuickBooks Name": "qb_name",
-                    "Lennar Name (Simplified)": "lennar_name",
-                    "Foreman": "foreman"
-                })
                 conn = sqlite3.connect(str(DB_PATH))
-                # Full replacing strategy for simplicity
-                edited_df.to_sql('mappings', conn, if_exists='replace', index=False)
-                # Ensure primary key is preserved by recreating table and inserting
-                # To be completely robust, we will replace table manually ensuring schema.
                 cursor = conn.cursor()
-                cursor.execute('CREATE TABLE IF NOT EXISTS mappings_new (qb_name TEXT PRIMARY KEY, lennar_name TEXT, foreman TEXT)')
-                cursor.execute('DELETE FROM mappings_new')
-                for _, row in edited_df.iterrows():
-                    cursor.execute('INSERT OR IGNORE INTO mappings_new (qb_name, lennar_name, foreman) VALUES (?, ?, ?)',
-                                   (str(row['qb_name']).strip(), str(row['lennar_name']).strip(), str(row['foreman']).strip()))
-                cursor.execute('DROP TABLE mappings')
-                cursor.execute('ALTER TABLE mappings_new RENAME TO mappings')
-                conn.commit()
-                conn.close()
-                st.toast("Database updated successfully! ✅", icon="✅")
-                # Also a success box
-                st.success("Database updated successfully! ✅")
-                
+                try:
+                    # ATOMIC OPERATION
+                    cursor.execute('DELETE FROM mappings')
+                    for _, row in edited_df.iterrows():
+                        q_val = str(row['Quickbook Name']).strip()
+                        l_val = str(row['Lennar Name (Simplified)']).strip() if pd.notna(row['Lennar Name (Simplified)']) else ""
+                        f_val = str(row['Foreman']).strip()
+                        cursor.execute('INSERT INTO mappings (qb_name, lennar_name, foreman) VALUES (?, ?, ?)', (q_val, l_val, f_val))
+                    
+                    conn.commit()
+                    
+                    # FORCED VALIDATION
+                    cursor.execute("SELECT COUNT(*) FROM mappings WHERE foreman IS NULL OR foreman = ''")
+                    invalid_count = cursor.fetchone()[0]
+                    
+                    if invalid_count == 0:
+                        st.toast("Database updated successfully! ✅", icon="✅")
+                        st.success("Database updated successfully! ✅")
+                    else:
+                        st.error("Validation failed! Corrupt records detected in DB. ❌")
+                        
+                except Exception as db_err:
+                    conn.rollback()
+                    st.error(f"Failed to save Database: {db_err}")
+                finally:
+                    conn.close()
+                    
     except Exception as e:
         st.error(f"Error loading SQL Database: {e}")
