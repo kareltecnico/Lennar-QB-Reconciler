@@ -5,6 +5,7 @@ import os
 import sys
 import signal
 import datetime
+import sqlite3
 
 # Ensure src modules are discoverable
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -33,14 +34,6 @@ def health_check():
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         repairs.append("Created /output directory.")
         
-    # Default mapping file check
-    map_file = DATA_DIR / "Mapeo de Nombres.xlsx"
-    if not map_file.exists():
-        # Auto-create empty skeleton
-        df_skeleton = pd.DataFrame(columns=['QuickBooks Name', 'Lennar Name (Simplified)', 'Foreman'])
-        df_skeleton.to_excel(map_file, index=False)
-        repairs.append("Auto-recreated default 'Mapeo de Nombres.xlsx' schema.")
-        
     if repairs:
         with open(log_file, "a") as f:
             ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -50,7 +43,7 @@ def health_check():
 
 health_check()
 
-st.set_page_config(page_title="Lennar-QB Reconciler V3.2", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Lennar-QB Reconciler V3.3", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
 # --- Custom Styling & Enterprise Dark Mode ---
 st.markdown("""
@@ -74,13 +67,13 @@ LOGO_PATH = OUT_DIR / "logo.png"
 # Default File Paths
 LENNAR_PATH = DATA_DIR / "lennar check.xlsx"
 QB_PATH = DATA_DIR / "to check from qb.xlsx"
-MAPPING_PATH = DATA_DIR / "Mapeo de Nombres.xlsx"
+DB_PATH = DATA_DIR / "reconciler.db"
 
 # Header & Logo
 col1, col2 = st.columns([1, 8])
 with col1:
     if LOGO_PATH.exists():
-        st.image(str(LOGO_PATH), width=80)
+        st.image(str(LOGO_PATH), width=100, use_column_width=False)
     else:
         st.markdown("<h3 style='color: #4CAF50;'>🏢 BRAND LOGO</h3>", unsafe_allow_html=True)
 with col2:
@@ -99,7 +92,7 @@ with st.sidebar:
     run_btn = st.button("🚀 Run Analysis", use_container_width=True, type="primary")
     
     st.markdown("---")
-    st.markdown("**File Uploaders** (Automatically overrides existing data in `/data`)")
+    st.markdown("**File Uploaders** (Overrides existing data in `/data`)")
     
     upload_lennar = st.file_uploader("Upload Lennar File", type=['xlsx'])
     upload_qb = st.file_uploader("Upload QuickBooks File", type=['xlsx'])
@@ -107,12 +100,12 @@ with st.sidebar:
     if upload_lennar:
         with open(LENNAR_PATH, "wb") as f:
             f.write(upload_lennar.getbuffer())
-        st.success("Lennar file updated.")
+        st.toast("Lennar file updated 📝")
         
     if upload_qb:
         with open(QB_PATH, "wb") as f:
             f.write(upload_qb.getbuffer())
-        st.success("QuickBooks file updated.")
+        st.toast("QuickBooks file updated 📝")
     
     st.markdown("---")
     if st.button("🛑 Shutdown App", use_container_width=True):
@@ -122,12 +115,12 @@ with st.sidebar:
 # ====== TAB 1: AUDIT DASHBOARD ======
 with tab_audit:
     if run_btn:
-        if LENNAR_PATH.exists() and QB_PATH.exists() and MAPPING_PATH.exists():
+        if LENNAR_PATH.exists() and QB_PATH.exists():
             with st.spinner("Analyzing files and applying Compensated Phase logic..."):
                 try:
-                    # Inicializar y auditar
+                    # Inicializar y auditar (Auto initializes SQL table dynamically)
                     rec = LennarQBReconciler(
-                        mapping_path=str(MAPPING_PATH),
+                        db_path=str(DB_PATH),
                         lennar_path=str(LENNAR_PATH),
                         qb_path=str(QB_PATH),
                         output_dir=str(OUT_DIR)
@@ -156,7 +149,7 @@ with tab_audit:
                         st.subheader("🔴 Required Actions in QuickBooks")
                         for d in discrepancias:
                             with st.container(border=True):
-                                st.error(f"**Error in {d['Project']}** (Phase {d['Phase']})")
+                                st.error(f"**{d['Project']}** (Phase {d['Phase']}) | Foreman: **{d['Foreman']}**")
                                 col_a, col_b, col_c = st.columns(3)
                                 col_a.metric("Lennar Amount", d['Lennar Amount'])
                                 col_b.metric("QB Amount", d['QB Amount'])
@@ -175,36 +168,64 @@ with tab_audit:
                                 
                 except Exception as e:
                     st.error(f"Execution Error: {e}")
-                    # Provide visual help for Data Schema
-                    st.info("Ensure the files meet the schema (E.g. Lennar must have 'COMMUNITY' and 'AMOUNT PAID').")
+                    st.info("Ensure the files meet the schema and mappings exist in the SQL Database.")
         else:
-            st.error("Missing core files in the `/data` directory. Please upload them on the sidebar.")
+            st.error("Missing core Excel files in the `/data` directory. Please upload them on the sidebar.")
     else:
         st.info("Press **Run Analysis** in the sidebar to compile the audit.")
 
 # ====== TAB 2: DATABASE MANAGEMENT ======
 with tab_db:
-    st.subheader("Project & Foreman Mapping Database")
-    st.write("Modify the central nomenclature dictionary. Changes are saved immediately to disk. **Null fields are not permitted.**")
+    st.subheader("SQLite Project & Foreman Database")
+    st.write("Modify the central nomenclature dictionary directly in SQL. Changes persist indefinitely without Excel files. **Null fields are not permitted.**")
+    
+    # Ensure DB exists using a dummy initialization
+    LennarQBReconciler(str(DB_PATH), "dummy", "dummy", "dummy")
     
     try:
-        df_map = pd.read_excel(MAPPING_PATH)
+        conn = sqlite3.connect(str(DB_PATH))
+        df_map = pd.read_sql_query('SELECT qb_name AS "QuickBooks Name", lennar_name AS "Lennar Name (Simplified)", foreman AS "Foreman" FROM mappings', conn)
+        conn.close()
         
         edited_df = st.data_editor(
             df_map,
             num_rows="dynamic",
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            key="db_editor"
         )
         
-        # Data Integrity Validation
         if st.button("Save Database", type="primary"):
-            # Check blanks
-            if edited_df.isnull().values.any() or (edited_df.astype(str).str.strip() == '').any().any():
-                st.error("Strict Constraint Failed: Blank cells are not allowed in 'Project' or 'Foreman' columns.")
+            # Check blanks for QB Name and Foreman specifically
+            if edited_df['QuickBooks Name'].astype(str).str.strip().eq('').any() or \
+               edited_df['Foreman'].astype(str).str.strip().eq('').any() or \
+               edited_df.isnull().values.any():
+                st.error("Error: All fields are mandatory! ❌")
             else:
-                edited_df.to_excel(MAPPING_PATH, index=False)
+                # Write to DB safely
+                edited_df = edited_df.rename(columns={
+                    "QuickBooks Name": "qb_name",
+                    "Lennar Name (Simplified)": "lennar_name",
+                    "Foreman": "foreman"
+                })
+                conn = sqlite3.connect(str(DB_PATH))
+                # Full replacing strategy for simplicity
+                edited_df.to_sql('mappings', conn, if_exists='replace', index=False)
+                # Ensure primary key is preserved by recreating table and inserting
+                # To be completely robust, we will replace table manually ensuring schema.
+                cursor = conn.cursor()
+                cursor.execute('CREATE TABLE IF NOT EXISTS mappings_new (qb_name TEXT PRIMARY KEY, lennar_name TEXT, foreman TEXT)')
+                cursor.execute('DELETE FROM mappings_new')
+                for _, row in edited_df.iterrows():
+                    cursor.execute('INSERT OR IGNORE INTO mappings_new (qb_name, lennar_name, foreman) VALUES (?, ?, ?)',
+                                   (str(row['qb_name']).strip(), str(row['lennar_name']).strip(), str(row['foreman']).strip()))
+                cursor.execute('DROP TABLE mappings')
+                cursor.execute('ALTER TABLE mappings_new RENAME TO mappings')
+                conn.commit()
+                conn.close()
+                st.toast("Database updated successfully! ✅", icon="✅")
+                # Also a success box
                 st.success("Database updated successfully! ✅")
                 
     except Exception as e:
-        st.error(f"Error loading Mapping Database: {e}")
+        st.error(f"Error loading SQL Database: {e}")

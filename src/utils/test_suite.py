@@ -1,29 +1,41 @@
 import sys
 import os
 from pathlib import Path
-import pandas as pd
+import sqlite3
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from reconciler import LennarQBReconciler
 
 def run_tests():
     data_dir = Path("data")
-    mapping_path = data_dir / "Mapeo de Nombres.xlsx"
+    db_path = data_dir / "reconciler.db"
     lennar_path = data_dir / "lennar check.xlsx"
     qb_path = data_dir / "to check from qb.xlsx"
     
+    # Init blank run to ensure DB creation
+    try:
+        LennarQBReconciler(str(db_path), str(lennar_path), str(qb_path), "output")
+    except Exception:
+        pass # Expected if files don't perfectly exist, but DB is created first
+
     # 1. Data Schema Test
-    print("Running Data Schema Test...")
-    if not mapping_path.exists():
-        raise FileNotFoundError(f"Mapping file not found at {mapping_path}")
+    print("Running Data Schema Test (SQLite)...")
+    if not db_path.exists():
+        raise FileNotFoundError(f"Database file not found at {db_path}")
         
-    df_map = pd.read_excel(mapping_path)
-    expected_cols = ['QuickBooks Name', 'Lennar Name (Simplified)', 'Foreman']
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(mappings)")
+    columns_info = cursor.fetchall()
+    conn.close()
+    
+    columns = [info[1] for info in columns_info]
+    expected_cols = ['qb_name', 'lennar_name', 'foreman']
     
     for col in expected_cols:
-        if col not in df_map.columns:
-            raise KeyError(f"Data Schema Error: Missing required column '{col}' in Mapping file.")
-    print("[PASS] Data Schema is accurate.")
+        if col not in columns:
+            raise KeyError(f"Data Schema Error: Missing required column '{col}' in SQLite mapping table.")
+    print("[PASS] SQLite Data Schema is accurate.")
 
     # 2. Backend Logic Test
     print("Running Backend Logic Test with historical files...")
@@ -32,7 +44,7 @@ def run_tests():
         return
         
     rec = LennarQBReconciler(
-        mapping_path=str(mapping_path),
+        db_path=str(db_path),
         lennar_path=str(lennar_path),
         qb_path=str(qb_path),
         output_dir="output"
