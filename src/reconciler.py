@@ -30,10 +30,14 @@ class LennarQBReconciler:
         self.mapping_df = pd.read_excel(self.mapping_path)
         
         # Validation for Mapping
-        required_map_cols = ['QuickBooks Name', 'Lennar Name (Simplified)', 'Foreman']
+        required_map_cols = ['QuickBooks Name', 'Lennar Name (Simplified)']
         for col in required_map_cols:
             if col not in self.mapping_df.columns:
                 raise ValueError(f"Data Schema Error: Mapping file is missing '{col}' column.")
+        
+        if 'Foreman' not in self.mapping_df.columns:
+            self.mapping_df['Foreman'] = 'Pending Assignment'
+            self.mapping_df.to_excel(self.mapping_path, index=False)
                 
         self.mapping_dict = dict(zip(
             self.mapping_df['QuickBooks Name'].astype(str).str.strip().str.upper(), 

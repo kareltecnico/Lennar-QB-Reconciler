@@ -4,12 +4,53 @@ from pathlib import Path
 import os
 import sys
 import signal
+import datetime
 
 # Ensure src modules are discoverable
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from reconciler import LennarQBReconciler
 
-st.set_page_config(page_title="Lennar-QB Reconciler V3.0", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+# --- Self-Healing Health Check ---
+def health_check():
+    ROOT_DIR = Path(__file__).parent.parent
+    LOG_DIR = ROOT_DIR / "logs"
+    DATA_DIR = ROOT_DIR / "data"
+    OUT_DIR = ROOT_DIR / "output"
+    
+    repairs = []
+    
+    if not LOG_DIR.exists():
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        repairs.append("Created /logs directory.")
+        
+    log_file = LOG_DIR / "system_health.log"
+    
+    if not DATA_DIR.exists():
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        repairs.append("Created /data directory.")
+        
+    if not OUT_DIR.exists():
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        repairs.append("Created /output directory.")
+        
+    # Default mapping file check
+    map_file = DATA_DIR / "Mapeo de Nombres.xlsx"
+    if not map_file.exists():
+        # Auto-create empty skeleton
+        df_skeleton = pd.DataFrame(columns=['QuickBooks Name', 'Lennar Name (Simplified)', 'Foreman'])
+        df_skeleton.to_excel(map_file, index=False)
+        repairs.append("Auto-recreated default 'Mapeo de Nombres.xlsx' schema.")
+        
+    if repairs:
+        with open(log_file, "a") as f:
+            ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"[{ts}] SYSTEM AUTO-REPAIR:\n")
+            for r in repairs:
+                f.write(f" - {r}\n")
+
+health_check()
+
+st.set_page_config(page_title="Lennar-QB Reconciler V3.2", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
 # --- Custom Styling & Enterprise Dark Mode ---
 st.markdown("""
@@ -25,10 +66,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Directory setup
-DATA_DIR = Path("data")
-OUT_DIR = Path("output")
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+ROOT_DIR = Path(__file__).parent.parent
+DATA_DIR = ROOT_DIR / "data"
+OUT_DIR = ROOT_DIR / "output"
+LOGO_PATH = OUT_DIR / "logo.png"
 
 # Default File Paths
 LENNAR_PATH = DATA_DIR / "lennar check.xlsx"
@@ -38,8 +79,10 @@ MAPPING_PATH = DATA_DIR / "Mapeo de Nombres.xlsx"
 # Header & Logo
 col1, col2 = st.columns([1, 8])
 with col1:
-    if Path("output/logo.png").exists():
-        st.image("output/logo.png", width=80)
+    if LOGO_PATH.exists():
+        st.image(str(LOGO_PATH), width=80)
+    else:
+        st.markdown("<h3 style='color: #4CAF50;'>🏢 BRAND LOGO</h3>", unsafe_allow_html=True)
 with col2:
     st.title("Lennar vs QuickBooks Audit Hub")
 
@@ -147,12 +190,6 @@ with tab_db:
     try:
         df_map = pd.read_excel(MAPPING_PATH)
         
-        # Enforce column structure if corrupted by an older version upgrade
-        if 'QuickBooks Name' not in df_map.columns:
-            df_map = df_map.rename(columns={'Nombre en QuickBooks': 'QuickBooks Name', 'Nombre en Lennar (Simplificado)': 'Lennar Name (Simplified)'})
-        if 'Foreman' not in df_map.columns:
-            df_map['Foreman'] = 'Unassigned'
-            
         edited_df = st.data_editor(
             df_map,
             num_rows="dynamic",
@@ -167,7 +204,7 @@ with tab_db:
                 st.error("Strict Constraint Failed: Blank cells are not allowed in 'Project' or 'Foreman' columns.")
             else:
                 edited_df.to_excel(MAPPING_PATH, index=False)
-                st.success("Database overwritten successfully!")
+                st.success("Database updated successfully! ✅")
                 
     except Exception as e:
         st.error(f"Error loading Mapping Database: {e}")
