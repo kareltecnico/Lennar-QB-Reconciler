@@ -66,6 +66,73 @@ class LennarQBReconciler:
                 break
         return 0  # Fallback: assume row 0 is the header
 
+    def _build_match_tables(self):
+        """Pre-compute sorted key/value lists for the aggressive matching engine.
+
+        Both lists are sorted longest-first so that, when multiple substrings
+        match, the most specific (longest) token wins.
+        E.g. 'ALTESSA TH 200' is preferred over 'ALTESSA TH'.
+        """
+        # keys_sorted: list of (key_upper, value_upper) sorted by len(key) desc
+        self._keys_sorted = sorted(
+            self.mapping_dict.items(),
+            key=lambda kv: len(kv[0]),
+            reverse=True
+        )
+        # values_sorted: list of (value_upper, value_upper) – same value on both sides
+        # so _resolve_project can return value directly
+        self._values_sorted = sorted(
+            set(self.mapping_dict.values()),
+            key=len,
+            reverse=True
+        )
+
+    def _resolve_project(self, raw_name: str) -> str:
+        """Aggressive 3-tier project name resolver.
+
+        Tier 1 – Exact key match:
+            mapping_dict['WILTON MANORS'] -> 'ALTESSA TH'
+
+        Tier 2 – Key is a substring of raw_name:
+            raw_name = 'WILTON MANORS (ALTESSA TH)'
+            key      = 'WILTON MANORS'  ->  maps to 'ALTESSA TH'
+
+        Tier 3 – Value is a substring of raw_name:
+            raw_name = 'ALTESSA TH SOME SUFFIX'
+            value    = 'ALTESSA TH'     ->  returns 'ALTESSA TH'
+
+        Hard-coded aliases (Vivant splits, Redland, Dorta) are resolved first
+        before the dictionary scan so they always take priority.
+        """
+        name = str(raw_name).strip().upper()
+
+        # ── Hard-coded priority aliases ─────────────────────────────────────
+        if 'VIVANT' in name:
+            if '2510460' in name: return 'VIVANT 2510460'
+            if '2510660' in name: return 'VIVANT - 2510660'
+        if 'REDLAND' in name:
+            return 'REDLAND RIDGE REDWOOD / REDLAND RIDGE SF'
+        if 'DORTA' in name:
+            return 'SP RESIDENTIAL VILLAS'
+
+        # ── Tier 1: exact key match ─────────────────────────────────────────
+        if name in self.mapping_dict:
+            return self.mapping_dict[name]
+
+        # ── Tier 2: key is a substring of raw_name (longest key wins) ───────
+        for key, value in self._keys_sorted:
+            if key and key in name:
+                return value
+
+        # ── Tier 3: value is a substring of raw_name (longest value wins) ───
+        for value in self._values_sorted:
+            if value and value in name:
+                return value
+
+        # ── No match: return the input as-is ───────────────────────────────
+        return name
+
+
     def _check_and_swap_files(self):
         # Use header hunter to detect the real header row before swapping
         lennar_hdr = self._find_header_row(self.lennar_path, ['COMMUNITY'])
@@ -86,17 +153,21 @@ class LennarQBReconciler:
         conn = sqlite3.connect(self.db_path)
         self.mapping_df = pd.read_sql_query('SELECT * FROM mappings', conn)
         conn.close()
-                 # Normalizing DB
+
+        # Normalizing DB
         self.mapping_dict = dict(zip(
-            self.mapping_df['qb_name'].astype(str).str.strip().str.upper(), 
+            self.mapping_df['qb_name'].astype(str).str.strip().str.upper(),
             self.mapping_df['lennar_name'].astype(str).str.strip().str.upper()
         ))
-        
+
         self.foreman_dict = dict(zip(
-            self.mapping_df['lennar_name'].astype(str).str.strip().str.upper(), 
+            self.mapping_df['lennar_name'].astype(str).str.strip().str.upper(),
             self.mapping_df['foreman'].astype(str).str.strip()
         ))
-        
+
+        # Build sorted match tables for the aggressive substring engine
+        self._build_match_tables()
+
         # ── LENNAR ─────────────────────────────────────────────────────────────
         lennar_hdr = self._find_header_row(self.lennar_path, ['COMMUNITY', 'AMOUNT PAID'])
         self.lennar_df = pd.read_excel(self.lennar_path, header=lennar_hdr)
@@ -128,18 +199,10 @@ class LennarQBReconciler:
         self.lennar_df['ACTIVITY'] = self.lennar_df.get('ACTIVITY', pd.Series()).fillna('')
         self.lennar_df['Phase'] = self.lennar_df['ACTIVITY'].apply(get_lennar_phase)
 
-        def clean_lennar_community(name):
-            if 'VIVANT' in name:
-                if '2510460' in name: return 'VIVANT 2510460'
-                if '2510660' in name: return 'VIVANT - 2510660'
-            if 'REDLAND' in name: return 'REDLAND RIDGE REDWOOD / REDLAND RIDGE SF'
-            if 'DORTA'   in name: return 'SP RESIDENTIAL VILLAS'
-            for mapped in set(self.mapping_dict.values()):
-                if str(mapped) in name:
-                    return str(mapped)
-            return name
-
-        self.lennar_df['Normalized_Project'] = self.lennar_df['COMMUNITY_RAW'].apply(clean_lennar_community)
+        # Aggressive mapping: resolve each Lennar community name to its canonical project
+        self.lennar_df['Normalized_Project'] = (
+            self.lennar_df['COMMUNITY_RAW'].apply(self._resolve_project)
+        )
 
         # ── QUICKBOOK ──────────────────────────────────────────────────────────
         qb_hdr = self._find_header_row(self.qb_path, ['NAME', 'TYPE', 'AMOUNT'])
@@ -162,13 +225,20 @@ class LennarQBReconciler:
         self.qb_df['Name_Clean'] = self.qb_df['Name'].astype(str).str.strip().str.upper()
 
         def parse_qb_row(name):
+            """Extract the project segment from a QB colon-delimited name, then
+            run through the aggressive mapping engine to get the canonical project."""
             parts = str(name).split(':')
             if len(parts) >= 2:
-                project   = parts[1].strip()
-                phase_raw = parts[-1].strip() if len(parts) >= 4 else "UNKNOWN"
-                mapped_proj = self.mapping_dict.get(project, project)
-                return pd.Series({'Normalized_Project': mapped_proj, 'Phase': phase_raw})
-            return pd.Series({'Normalized_Project': name, 'Phase': 'UNKNOWN'})
+                # parts[1] is the project token; last part is the phase
+                project_raw = parts[1].strip()
+                phase_raw   = parts[-1].strip() if len(parts) >= 4 else 'UNKNOWN'
+            else:
+                project_raw = name
+                phase_raw   = 'UNKNOWN'
+
+            # Aggressive resolve: exact → key-substring → value-substring
+            mapped_proj = self._resolve_project(project_raw)
+            return pd.Series({'Normalized_Project': mapped_proj, 'Phase': phase_raw})
 
         parsed = self.qb_df['Name_Clean'].apply(parse_qb_row)
         self.qb_df = pd.concat([self.qb_df, parsed], axis=1)
