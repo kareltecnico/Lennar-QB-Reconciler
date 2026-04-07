@@ -119,6 +119,8 @@ class LennarQBReconciler:
 
         # Quickbook
         self.qb_df = pd.read_excel(self.qb_path)
+        # Clean column headers FIRST — Excel often embeds hidden whitespace that breaks column lookups
+        self.qb_df.columns = [str(c).strip() for c in self.qb_df.columns]
         if 'Name' not in self.qb_df.columns or 'Type' not in self.qb_df.columns or 'Amount' not in self.qb_df.columns:
             raise ValueError("Data Schema Error (Quickbook file): Missing required columns 'Name', 'Type', or 'Amount'.")
             

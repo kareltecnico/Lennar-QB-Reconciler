@@ -142,7 +142,7 @@ with tab_audit:
         
     if run_btn:
         status_msg.empty()  # Clear sidebar notifications
-        status_hub.success("Analysis completed successfully! ✅")
+        # NOTE: status_hub remains "Waiting" until audit() completes without exceptions
         
         if LENNAR_PATH.exists() and QB_PATH.exists():
             
@@ -165,6 +165,8 @@ with tab_audit:
                     )
                     
                     result = rec.audit()
+                    # SUCCESS — only set after audit() returns without exceptions
+                    status_hub.success("Analysis completed successfully! ✅")
                     
                     # UI Metrics
                     st.markdown("<div class='kpi-container'>", unsafe_allow_html=True)
@@ -240,6 +242,31 @@ with tab_db:
             save_clicked = st.button("💾 Save Database", type="primary")
             
         if save_clicked:
+            # Reconstruct the final DataFrame from session_state for reliable capture
+            # st.data_editor returns the live edited version, but reading directly
+            # from session_state delta ensures all edits (rows added/deleted/changed) are included.
+            editor_state = st.session_state.get("db_editor", None)
+            if editor_state is not None:
+                working_df = df_map.copy()
+                # Apply deletions
+                deleted_rows = editor_state.get("deleted_rows", [])
+                if deleted_rows:
+                    working_df = working_df.drop(index=deleted_rows).reset_index(drop=True)
+                # Apply edits
+                edited_rows = editor_state.get("edited_rows", {})
+                for idx_str, changes in edited_rows.items():
+                    idx = int(idx_str)
+                    if idx < len(working_df):
+                        for col_name, val in changes.items():
+                            working_df.at[idx, col_name] = val
+                # Apply added rows
+                added_rows = editor_state.get("added_rows", [])
+                if added_rows:
+                    new_rows_df = pd.DataFrame(added_rows)
+                    working_df = pd.concat([working_df, new_rows_df], ignore_index=True)
+                edited_df = working_df
+            # else: fall back to the widget's direct return value (already set above)
+            
             has_errors = False
             for index, row in edited_df.iterrows():
                 if pd.isna(row['Quickbook Name']) or str(row['Quickbook Name']).strip() == "":
@@ -260,7 +287,17 @@ with tab_db:
                         f_val = str(row['Foreman']).strip()
                         cursor.execute('INSERT INTO mappings (qb_name, lennar_name, foreman) VALUES (?, ?, ?)', (q_val, l_val, f_val))
                     
+                    # --- PERSISTENCE VERIFICATION: print row count to terminal before commit ---
+                    cursor.execute('SELECT COUNT(*) FROM mappings')
+                    pending_count = cursor.fetchone()[0]
+                    print(f"[DB SAVE] About to commit {pending_count} row(s) to mappings table in {DB_PATH}")
+                    
                     conn.commit()
+                    
+                    # Post-commit verification
+                    cursor.execute('SELECT COUNT(*) FROM mappings')
+                    committed_count = cursor.fetchone()[0]
+                    print(f"[DB SAVE] Commit verified: {committed_count} row(s) now in mappings table.")
                     
                     cursor.execute("SELECT COUNT(*) FROM mappings WHERE foreman IS NULL OR foreman = ''")
                     invalid_count = cursor.fetchone()[0]
