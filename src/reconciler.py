@@ -325,7 +325,7 @@ class LennarQBReconciler:
                     )
                 else:
                     dashboard_lines.append(
-                        f"✅ PROJECT BALANCED: {proj} (Exact Match). Foreman: {f_man}"
+                        f"✅ PROJECT BALANCED: {proj} 💯. Foreman: {f_man}"
                     )
             else:
                 dashboard_lines.append(

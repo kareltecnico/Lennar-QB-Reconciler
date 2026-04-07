@@ -240,48 +240,59 @@ with tab_audit:
                                         )
 
                     st.markdown("<br>", unsafe_allow_html=True)
-                    
-                    with st.expander("✅ Balanced Projects (Compensated internally or Exact Match)"):
+
+                    # ── EXPANDER 1: Balanced Projects (clean list) ────────────────
+                    with st.expander("✅ Balanced Projects"):
                         for line in dashboard_lines:
                             if line.startswith("✅ PROJECT BALANCED:"):
-                                # ── Render the balanced project line as-is ──────────────
-                                st.markdown(f"- {line.replace('✅ PROJECT BALANCED:', '✅').strip()}")
+                                # Render the full line, swapping the prefix for a cleaner label
+                                display = line.replace("✅ PROJECT BALANCED:", "✅").strip()
+                                st.markdown(f"- {display}")
 
-                                # ── Extract the canonical project key from the line ──────
-                                # Line format: "✅ PROJECT BALANCED: PROJ_NAME (suffix). Foreman: X"
+                    # ── EXPANDER 2: Backcharge Details (orange pills) ─────────────
+                    # Only show if there is at least one backcharge in this audit run
+                    if bc_detail:
+                        with st.expander("⚠️ Backcharge Details"):
+                            # Helper: extract canonical project key from a dashboard line
+                            def _extract_proj_key(line: str) -> str:
                                 raw = line.replace("✅ PROJECT BALANCED:", "").strip()
-                                # Strip the "(Exact Match)" / "(Internal Phase...)" suffix
-                                if " (" in raw:
-                                    proj_key = raw.split(" (")[0].strip()
-                                elif ". Foreman:" in raw:
-                                    proj_key = raw.split(". Foreman:")[0].strip()
-                                else:
-                                    proj_key = raw.strip()
-                                # Normalize to UPPER to match bc_detail keys
-                                proj_key = proj_key.upper()
+                                # Split on " 💯", " (", or ". Foreman:" — whichever comes first
+                                for sep in [" 💯", " (", ". Foreman:"]:
+                                    if sep in raw:
+                                        return raw.split(sep)[0].strip().upper()
+                                return raw.upper()
 
-                                # ── Orange backcharge alerts (if any) ───────────────────
+                            # Iterate dashboard lines to preserve project ordering
+                            rendered_projects = set()
+                            for line in dashboard_lines:
+                                if not line.startswith("✅ PROJECT BALANCED:"):
+                                    continue
+                                proj_key = _extract_proj_key(line)
+                                if proj_key in rendered_projects:
+                                    continue   # avoid duplicates
                                 proj_bcs = bc_detail.get(proj_key, [])
+                                if not proj_bcs:
+                                    continue
+                                rendered_projects.add(proj_key)
                                 for bc in proj_bcs:
-                                    bc_amt = bc['amount']   # negative float
+                                    bc_amt = bc['amount']        # negative float
                                     bc_act = bc['activity'] or 'N/A'
                                     st.markdown(
                                         f"<div style='"
-                                        f"margin-left:1.5rem;"
-                                        f"margin-top:0.25rem;"
-                                        f"padding:0.4rem 0.75rem;"
+                                        f"margin-bottom:0.4rem;"
+                                        f"padding:0.45rem 0.85rem;"
                                         f"border-left:4px solid #FF8C00;"
                                         f"border-radius:4px;"
-                                        f"background:rgba(255,140,0,0.08);"
+                                        f"background:rgba(255,140,0,0.09);"
                                         f"font-size:0.875rem;"
                                         f"'>"
                                         f"🟠 <b>Backcharge Detected</b> &nbsp;|&nbsp; "
+                                        f"Project: <b>{proj_key}</b> &nbsp;|&nbsp; "
                                         f"Activity: <b>{bc_act}</b> &nbsp;|&nbsp; "
                                         f"Amount: <code>-${abs(bc_amt):,.2f}</code>"
                                         f"</div>",
                                         unsafe_allow_html=True
                                     )
-
 
                 except Exception as e:
                     ui_msgs.error(f"Execution Error: {e}")
