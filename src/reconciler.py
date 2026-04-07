@@ -53,13 +53,30 @@ class LennarQBReconciler:
         conn.commit()
         conn.close()
         
+    def _find_header_row(self, path, required_cols_upper, max_scan=10):
+        """Scan up to max_scan rows to find the row index where required columns exist.
+        Returns the integer row index suitable for pd.read_excel(header=N), or 0 as fallback."""
+        for i in range(max_scan):
+            try:
+                probe = pd.read_excel(path, header=i, nrows=0)
+                probe_cols = [str(c).strip().replace('\n', ' ').upper() for c in probe.columns]
+                if all(req in probe_cols for req in required_cols_upper):
+                    return i
+            except Exception:
+                break
+        return 0  # Fallback: assume row 0 is the header
+
     def _check_and_swap_files(self):
-        df1_cols = pd.read_excel(self.lennar_path, nrows=0).columns
-        df2_cols = pd.read_excel(self.qb_path, nrows=0).columns
-        
+        # Use header hunter to detect the real header row before swapping
+        lennar_hdr = self._find_header_row(self.lennar_path, ['COMMUNITY'])
+        qb_hdr     = self._find_header_row(self.qb_path, ['NAME', 'TYPE', 'AMOUNT'])
+
+        df1_cols = pd.read_excel(self.lennar_path, header=lennar_hdr, nrows=0).columns
+        df2_cols = pd.read_excel(self.qb_path,     header=qb_hdr,     nrows=0).columns
+
         df1_cols_upper = [str(c).strip().upper() for c in df1_cols]
         df2_cols_upper = [str(c).strip().upper() for c in df2_cols]
-        
+
         if 'COMMUNITY' not in df1_cols_upper and 'COMMUNITY' in df2_cols_upper:
             self.lennar_path, self.qb_path = self.qb_path, self.lennar_path
             
@@ -80,63 +97,79 @@ class LennarQBReconciler:
             self.mapping_df['foreman'].astype(str).str.strip()
         ))
         
-        # Lennar
-        self.lennar_df = pd.read_excel(self.lennar_path)
+        # ── LENNAR ─────────────────────────────────────────────────────────────
+        lennar_hdr = self._find_header_row(self.lennar_path, ['COMMUNITY', 'AMOUNT PAID'])
+        self.lennar_df = pd.read_excel(self.lennar_path, header=lennar_hdr)
         self.lennar_df.columns = [str(c).strip().replace('\n', ' ').upper() for c in self.lennar_df.columns]
-        
+
         if 'COMMUNITY' not in self.lennar_df.columns or 'AMOUNT PAID' not in self.lennar_df.columns:
-            raise ValueError("Data Schema Error (Lennar file): Missing required columns 'COMMUNITY' or 'AMOUNT PAID'. Please check your Excel structure.")
-            
+            raise ValueError(
+                f"Data Schema Error (Lennar file): Missing required columns 'COMMUNITY' or 'AMOUNT PAID'. "
+                f"Detected columns: {list(self.lennar_df.columns)}"
+            )
+
         self.lennar_df = self.lennar_df.dropna(subset=['COMMUNITY'])
+        # Strip commas from currency strings before numeric conversion (e.g. "1,234.56" → 1234.56)
+        self.lennar_df['AMOUNT PAID'] = (
+            self.lennar_df['AMOUNT PAID'].astype(str).str.replace(',', '', regex=False)
+        )
         self.lennar_df['AMOUNT PAID'] = pd.to_numeric(self.lennar_df['AMOUNT PAID'], errors='coerce').fillna(0)
         self.lennar_df = self.lennar_df[self.lennar_df['AMOUNT PAID'] > 0]
         self.lennar_df['COMMUNITY_RAW'] = self.lennar_df['COMMUNITY'].astype(str).str.strip().str.upper()
-        
+
         def get_lennar_phase(activity):
             activity = str(activity).upper()
-            if 'ROUGH' in activity: return 'A'
-            if 'TOP OUT' in activity: return 'B'
-            if 'FINAL' in activity: return 'C'
+            if 'ROUGH'    in activity: return 'A'
+            if 'TOP OUT'  in activity: return 'B'
+            if 'FINAL'    in activity: return 'C'
             if 'WARRANTY' in activity or 'THEFT' in activity: return 'X'
             return 'UNKNOWN'
-        
+
         self.lennar_df['ACTIVITY'] = self.lennar_df.get('ACTIVITY', pd.Series()).fillna('')
         self.lennar_df['Phase'] = self.lennar_df['ACTIVITY'].apply(get_lennar_phase)
-        
+
         def clean_lennar_community(name):
             if 'VIVANT' in name:
                 if '2510460' in name: return 'VIVANT 2510460'
                 if '2510660' in name: return 'VIVANT - 2510660'
             if 'REDLAND' in name: return 'REDLAND RIDGE REDWOOD / REDLAND RIDGE SF'
-            if 'DORTA' in name: return 'SP RESIDENTIAL VILLAS'
-            
+            if 'DORTA'   in name: return 'SP RESIDENTIAL VILLAS'
             for mapped in set(self.mapping_dict.values()):
                 if str(mapped) in name:
                     return str(mapped)
             return name
-            
+
         self.lennar_df['Normalized_Project'] = self.lennar_df['COMMUNITY_RAW'].apply(clean_lennar_community)
 
-        # Quickbook
-        self.qb_df = pd.read_excel(self.qb_path)
-        # Clean column headers FIRST — Excel often embeds hidden whitespace that breaks column lookups
-        self.qb_df.columns = [str(c).strip() for c in self.qb_df.columns]
+        # ── QUICKBOOK ──────────────────────────────────────────────────────────
+        qb_hdr = self._find_header_row(self.qb_path, ['NAME', 'TYPE', 'AMOUNT'])
+        self.qb_df = pd.read_excel(self.qb_path, header=qb_hdr)
+        # Normalize headers: strip whitespace and newlines
+        self.qb_df.columns = [str(c).strip().replace('\n', ' ') for c in self.qb_df.columns]
+
         if 'Name' not in self.qb_df.columns or 'Type' not in self.qb_df.columns or 'Amount' not in self.qb_df.columns:
-            raise ValueError("Data Schema Error (Quickbook file): Missing required columns 'Name', 'Type', or 'Amount'.")
-            
+            raise ValueError(
+                f"Data Schema Error (Quickbook file): Missing required columns 'Name', 'Type', or 'Amount'. "
+                f"Detected columns: {list(self.qb_df.columns)}"
+            )
+
         self.qb_df = self.qb_df.dropna(subset=['Name', 'Type'])
+        # Strip commas from currency strings before numeric conversion
+        self.qb_df['Amount'] = (
+            self.qb_df['Amount'].astype(str).str.replace(',', '', regex=False)
+        )
         self.qb_df['Amount'] = pd.to_numeric(self.qb_df['Amount'], errors='coerce').fillna(0)
         self.qb_df['Name_Clean'] = self.qb_df['Name'].astype(str).str.strip().str.upper()
 
         def parse_qb_row(name):
             parts = str(name).split(':')
             if len(parts) >= 2:
-                project = parts[1].strip()
+                project   = parts[1].strip()
                 phase_raw = parts[-1].strip() if len(parts) >= 4 else "UNKNOWN"
                 mapped_proj = self.mapping_dict.get(project, project)
                 return pd.Series({'Normalized_Project': mapped_proj, 'Phase': phase_raw})
             return pd.Series({'Normalized_Project': name, 'Phase': 'UNKNOWN'})
-            
+
         parsed = self.qb_df['Name_Clean'].apply(parse_qb_row)
         self.qb_df = pd.concat([self.qb_df, parsed], axis=1)
 

@@ -134,15 +134,16 @@ with st.sidebar:
 
 # ====== TAB 1: AUDIT DASHBOARD ======
 with tab_audit:
+    # Use a single empty slot for the status banner — avoids the black-bar artifact
     status_hub = st.empty()
-    ui_msgs = st.empty()
-    
+    ui_msgs    = st.empty()
+
     if not run_btn:
         status_hub.info("Waiting for analysis... 🔍")
-        
+
     if run_btn:
-        status_msg.empty()  # Clear sidebar notifications
-        # NOTE: status_hub remains "Waiting" until audit() completes without exceptions
+        status_msg.empty()          # Clear sidebar upload notifications
+        status_hub.empty()          # Collapse the blue info box immediately — no black bar
         
         if LENNAR_PATH.exists() and QB_PATH.exists():
             
@@ -237,8 +238,8 @@ with tab_db:
             key="db_editor"
         )
         
-        col, _ = st.columns([1, 4])
-        with col:
+        col1, col2 = st.columns([1, 4])
+        with col1:
             save_clicked = st.button("💾 Save Database", type="primary")
             
         if save_clicked:
