@@ -185,7 +185,9 @@ class LennarQBReconciler:
             self.lennar_df['AMOUNT PAID'].astype(str).str.replace(',', '', regex=False)
         )
         self.lennar_df['AMOUNT PAID'] = pd.to_numeric(self.lennar_df['AMOUNT PAID'], errors='coerce').fillna(0)
-        self.lennar_df = self.lennar_df[self.lennar_df['AMOUNT PAID'] > 0]
+        # Keep ALL rows (positive = regular payments, negative = backcharges)
+        # Filtering is done later in audit() so both segments are available.
+        self.lennar_df = self.lennar_df[self.lennar_df['AMOUNT PAID'] != 0]
         self.lennar_df['COMMUNITY_RAW'] = self.lennar_df['COMMUNITY'].astype(str).str.strip().str.upper()
 
         def get_lennar_phase(activity):
@@ -196,7 +198,11 @@ class LennarQBReconciler:
             if 'WARRANTY' in activity or 'THEFT' in activity: return 'X'
             return 'UNKNOWN'
 
-        self.lennar_df['ACTIVITY'] = self.lennar_df.get('ACTIVITY', pd.Series()).fillna('')
+        # Preserve ACTIVITY column — fall back to empty string if absent in this Excel
+        if 'ACTIVITY' in self.lennar_df.columns:
+            self.lennar_df['ACTIVITY'] = self.lennar_df['ACTIVITY'].fillna('')
+        else:
+            self.lennar_df['ACTIVITY'] = ''
         self.lennar_df['Phase'] = self.lennar_df['ACTIVITY'].apply(get_lennar_phase)
 
         # Aggressive mapping: resolve each Lennar community name to its canonical project
@@ -245,84 +251,132 @@ class LennarQBReconciler:
 
     def audit(self):
         self.load_data()
-        
-        subtotal_lennar = self.lennar_df['AMOUNT PAID'].sum()
-        subtotal_qb = self.qb_df['Amount'].sum()
-        total_diff = round(subtotal_lennar - subtotal_qb, 2)
-        
-        lennar_g = self.lennar_df.groupby(['Normalized_Project', 'Phase'])['AMOUNT PAID'].sum().reset_index()
-        qb_g = self.qb_df.groupby(['Normalized_Project', 'Phase'])['Amount'].sum().reset_index()
-        
+
+        # ── Segment Lennar rows ──────────────────────────────────────────────
+        # Positive rows = regular payments used for main reconciliation
+        # Negative rows = backcharges tracked separately
+        lennar_pos = self.lennar_df[self.lennar_df['AMOUNT PAID'] > 0].copy()
+        lennar_neg = self.lennar_df[self.lennar_df['AMOUNT PAID'] < 0].copy()
+
+        bc_count = len(lennar_neg)
+        bc_total = lennar_neg['AMOUNT PAID'].sum()
+        print(f"[AUDIT] Lennar rows loaded: {len(self.lennar_df)} "
+              f"(positive: {len(lennar_pos)}, backcharges: {bc_count})")
+        if bc_count > 0:
+            print(f"[AUDIT] Total backcharge amount: ${bc_total:,.2f}")
+
+        # ── KPI totals ───────────────────────────────────────────────────────
+        subtotal_lennar_pos = lennar_pos['AMOUNT PAID'].sum()   # No BC
+        subtotal_lennar_bc  = bc_total                          # BC total (negative)
+        subtotal_qb         = self.qb_df['Amount'].sum()
+        total_diff          = round(subtotal_lennar_pos - subtotal_qb, 2)
+
+        # ── Main reconciliation uses ONLY positive rows ──────────────────────
+        lennar_g = lennar_pos.groupby(['Normalized_Project', 'Phase'])['AMOUNT PAID'].sum().reset_index()
+        qb_g     = self.qb_df.groupby(['Normalized_Project', 'Phase'])['Amount'].sum().reset_index()
+
         merge_df = pd.merge(
             lennar_g.rename(columns={'AMOUNT PAID': 'Lennar'}),
             qb_g.rename(columns={'Amount': 'QB'}),
             on=['Normalized_Project', 'Phase'], how='outer'
         ).fillna(0)
-        
+
         merge_df['Diff'] = (merge_df['Lennar'] - merge_df['QB']).round(2)
-        
+
         project_net = merge_df.groupby('Normalized_Project').agg(
             Proj_Lennar=('Lennar', 'sum'),
             Proj_QB=('QB', 'sum'),
             Proj_Diff=('Diff', 'sum')
         ).reset_index()
-        
-        discrepancias = []
+
+        # ── Backcharge detail: group by project with activity descriptions ───
+        backcharges_detail = {}   # { 'PROJECT NAME': [{'activity': ..., 'amount': ...}, ...] }
+        if bc_count > 0:
+            bc_grouped = lennar_neg.groupby('Normalized_Project')
+            for proj_name, group in bc_grouped:
+                entries = []
+                for _, bc_row in group.iterrows():
+                    activity_label = str(bc_row.get('ACTIVITY', '')).strip() or 'N/A'
+                    entries.append({
+                        'activity': activity_label,
+                        'amount':   bc_row['AMOUNT PAID'],       # negative number
+                        'foreman':  self.foreman_dict.get(proj_name, 'Pending Assignment')
+                    })
+                backcharges_detail[proj_name] = entries
+            print(f"[AUDIT] Backcharges found in {len(backcharges_detail)} project(s): "
+                  f"{list(backcharges_detail.keys())}")
+
+        # ── Build dashboard lines & discrepancies ────────────────────────────
+        discrepancias  = []
         dashboard_lines = []
-        
+
         for _, r in project_net.iterrows():
-            proj = r['Normalized_Project']
+            proj     = r['Normalized_Project']
             net_diff = round(r['Proj_Diff'], 2)
-            
-            f_man = self.foreman_dict.get(proj, "Pending Assignment")
-            
+            f_man    = self.foreman_dict.get(proj, 'Pending Assignment')
+
             if net_diff == 0.00:
-                internal_diffs = merge_df[(merge_df['Normalized_Project'] == proj) & (merge_df['Diff'] != 0)]
-                if not internal_diffs.empty:
-                    dashboard_lines.append(f"✅ PROJECT BALANCED: {proj} (Internal Phase Differences Compensated). Foreman: {f_man}")
-                else:
-                    dashboard_lines.append(f"✅ PROJECT BALANCED: {proj} (Exact Match). Foreman: {f_man}")
-            else:
-                dashboard_lines.append(f"🔴 REQUIRED ACTION DETECTED: {proj} | Diff Total: ${net_diff:,.2f}")
-                
                 internal_diffs = merge_df[
-                    (merge_df['Normalized_Project'] == proj) & 
-                    (merge_df['Diff'] != 0)
+                    (merge_df['Normalized_Project'] == proj) & (merge_df['Diff'] != 0)
                 ]
-                
+                if not internal_diffs.empty:
+                    dashboard_lines.append(
+                        f"✅ PROJECT BALANCED: {proj} (Internal Phase Differences Compensated). Foreman: {f_man}"
+                    )
+                else:
+                    dashboard_lines.append(
+                        f"✅ PROJECT BALANCED: {proj} (Exact Match). Foreman: {f_man}"
+                    )
+            else:
+                dashboard_lines.append(
+                    f"🔴 REQUIRED ACTION DETECTED: {proj} | Diff Total: ${net_diff:,.2f}"
+                )
+
+                internal_diffs = merge_df[
+                    (merge_df['Normalized_Project'] == proj) & (merge_df['Diff'] != 0)
+                ]
+
                 for _, row in internal_diffs.iterrows():
                     auth_phase, diff = row['Phase'], row['Diff']
-                    
-                    qb_matches = self.qb_df[(self.qb_df['Normalized_Project'] == proj) & (self.qb_df['Phase'] == auth_phase)]
-                    memos = ", ".join(qb_matches['Memo'].dropna().astype(str).unique()) if not qb_matches.empty else "N/A"
-                    
-                    diff_type = "Short" if diff > 0 else "Over"
-                    action = f"Correct amount in Invoice {memos}. {diff_type} by ${abs(diff):,.2f}."
-                    
+
+                    qb_matches = self.qb_df[
+                        (self.qb_df['Normalized_Project'] == proj) &
+                        (self.qb_df['Phase'] == auth_phase)
+                    ]
+                    memos = (
+                        ", ".join(qb_matches['Memo'].dropna().astype(str).unique())
+                        if not qb_matches.empty else 'N/A'
+                    )
+
+                    diff_type = 'Short' if diff > 0 else 'Over'
+                    action    = f"Correct amount in Invoice {memos}. {diff_type} by ${abs(diff):,.2f}."
+
                     dashboard_lines.append(f"    - Phase {auth_phase}: {action}")
-                    
+
                     discrepancias.append({
-                        'Project': proj,
-                        'Phase': auth_phase,
+                        'Project':           proj,
+                        'Phase':             auth_phase,
                         'Quickbook Invoice': memos,
-                        'Lennar Amount': f"${row['Lennar']:,.2f}",
-                        'Quickbook Amount': f"${row['QB']:,.2f}",
-                        'Difference': f"${diff:,.2f}",
-                        'Action Required': action,
-                        'Foreman': f_man
+                        'Lennar Amount':     f"${row['Lennar']:,.2f}",
+                        'Quickbook Amount':  f"${row['QB']:,.2f}",
+                        'Difference':        f"${diff:,.2f}",
+                        'Action Required':   action,
+                        'Foreman':           f_man
                     })
 
         import datetime
         ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         if discrepancias:
-            df_log = pd.DataFrame(discrepancias)
+            df_log   = pd.DataFrame(discrepancias)
             csv_path = self.output_dir / f"audit_results_{ts}.csv"
             df_log.to_csv(csv_path, index=False)
-            
+
         return {
-            "total_lennar": subtotal_lennar,
-            "total_qb": subtotal_qb,
-            "total_diff": total_diff,
-            "dashboard_lines": dashboard_lines,
-            "discrepancias": discrepancias
+            "total_lennar":      subtotal_lennar_pos,   # Positives only (No BC)
+            "total_lennar_bc":   subtotal_lennar_bc,    # Backcharge total (negative)
+            "total_qb":          subtotal_qb,
+            "total_diff":        total_diff,
+            "dashboard_lines":   dashboard_lines,
+            "discrepancias":     discrepancias,
+            "backcharges_detail": backcharges_detail,   # {project: [{activity, amount, foreman}]}
         }

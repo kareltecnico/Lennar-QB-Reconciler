@@ -169,38 +169,76 @@ with tab_audit:
                     # SUCCESS — only set after audit() returns without exceptions
                     status_hub.success("Analysis completed successfully! ✅")
                     
-                    # UI Metrics
+                    # UI Metrics — 4 KPI columns
+                    bc_total   = result.get('total_lennar_bc', 0.0)
+                    bc_detail  = result.get('backcharges_detail', {})
+                    has_bc     = bc_total != 0.0
+
                     st.markdown("<div class='kpi-container'>", unsafe_allow_html=True)
-                    kpi1, kpi2, kpi3 = st.columns(3)
+                    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
                     with kpi1:
-                        st.metric(label="Total Lennar", value=f"${result['total_lennar']:,.2f}")
+                        st.metric(
+                            label="Total Lennar (No BC)",
+                            value=f"${result['total_lennar']:,.2f}"
+                        )
                     with kpi2:
-                        st.metric(label="Total Quickbook", value=f"${result['total_qb']:,.2f}")
+                        st.metric(
+                            label="Total Quickbook",
+                            value=f"${result['total_qb']:,.2f}"
+                        )
                     with kpi3:
-                        st.metric(label="Exact Net Difference", value=f"${result['total_diff']:,.2f}")
+                        st.metric(
+                            label="Net Difference",
+                            value=f"${result['total_diff']:,.2f}"
+                        )
+                    with kpi4:
+                        # Show backcharge total in red via delta hack
+                        bc_value = abs(bc_total) if has_bc else 0.0
+                        bc_label = f"-${bc_value:,.2f}" if has_bc else "$0.00"
+                        st.metric(
+                            label="Total Backcharges ⚠️" if has_bc else "Total Backcharges",
+                            value=bc_label,
+                            delta=f"{len(bc_detail)} project(s) affected" if has_bc else None,
+                            delta_color="inverse"
+                        )
                     st.markdown("</div>", unsafe_allow_html=True)
                     
                     # UI Errors and OKs
-                    discrepancias = result['discrepancias']
+                    discrepancias   = result['discrepancias']
                     dashboard_lines = result['dashboard_lines']
-                    
+                    bc_detail       = result.get('backcharges_detail', {})
+
                     if not discrepancias:
                         ui_msgs.success("¡MATHEMATICALLY BALANCED! No uncompensated differences found.")
                     else:
                         st.subheader("🔴 Required Actions in Quickbook")
                         for d in discrepancias:
+                            proj_key = d['Project']   # already normalized / uppercased
                             with st.container(border=True):
                                 st.markdown(f"### **{d['Project']}** (Phase {d['Phase']}) | Foreman: **{d['Foreman']}**")
-                                
-                                # ROW 1 Clean Metrics
+
+                                # ROW 1: Clean financial metrics
                                 col_a, col_b, col_c = st.columns(3)
-                                col_a.metric("Lennar Amount", d['Lennar Amount'])
+                                col_a.metric("Lennar Amount",    d['Lennar Amount'])
                                 col_b.metric("Quickbook Amount", d['Quickbook Amount'])
-                                col_c.metric("Difference", d['Difference'])
-                                
-                                # ROW 2 Exact Action Wording
+                                col_c.metric("Difference",       d['Difference'])
+
+                                # ROW 2: Required action instruction
                                 st.warning(f"**🔥 REQUIRED ACTION IN QUICKBOOK:** {d['Action Required']}")
-                                
+
+                                # ROW 3: Backcharge alerts for this project (if any)
+                                proj_bcs = bc_detail.get(proj_key, [])
+                                if proj_bcs:
+                                    for bc in proj_bcs:
+                                        bc_amt  = bc['amount']     # negative float
+                                        bc_act  = bc['activity']
+                                        st.info(
+                                            f"⚠️ **Backcharge Detected** &nbsp;|&nbsp; "
+                                            f"Activity: **{bc_act}** &nbsp;|&nbsp; "
+                                            f"Amount: **-${abs(bc_amt):,.2f}**",
+                                            icon="🟡"
+                                        )
+
                     st.markdown("<br>", unsafe_allow_html=True)
                     
                     with st.expander("✅ Balanced Projects (Compensated internally or Exact Match)"):
