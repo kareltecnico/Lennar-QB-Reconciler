@@ -279,12 +279,14 @@ with tab_audit:
                                     bc_act = bc['activity'] or 'N/A'
                                     st.markdown(
                                         f"<div style='"
-                                        f"margin-bottom:0.4rem;"
-                                        f"padding:0.45rem 0.85rem;"
+                                        f"margin-bottom:0.5rem;"
+                                        f"padding:0.35rem 0.75rem;"
                                         f"border-left:4px solid #FF8C00;"
                                         f"border-radius:4px;"
                                         f"background:rgba(255,140,0,0.09);"
-                                        f"font-size:0.875rem;"
+                                        f"font-family:inherit;"
+                                        f"font-size:1rem;"
+                                        f"line-height:1.6;"
                                         f"'>"
                                         f"🟠 <b>Backcharge Detected</b> &nbsp;|&nbsp; "
                                         f"Project: <b>{proj_key}</b> &nbsp;|&nbsp; "

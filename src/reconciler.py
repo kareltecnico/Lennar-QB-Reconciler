@@ -321,7 +321,7 @@ class LennarQBReconciler:
                 ]
                 if not internal_diffs.empty:
                     dashboard_lines.append(
-                        f"✅ PROJECT BALANCED: {proj} (Internal Phase Differences Compensated). Foreman: {f_man}"
+                        f"✅ PROJECT BALANCED: {proj} 💯. Foreman: {f_man}"
                     )
                 else:
                     dashboard_lines.append(
